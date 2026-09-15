@@ -55,6 +55,96 @@
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   }
 
+  // Decodes the small set of HTML entities Meta's export actually uses (named +
+  // numeric) and strips inner tags (e.g. <br>). Node has no DOM to lean on for this
+  // (unlike docs/reference/prototype/v0.0/clipping-box.html's div/innerHTML trick),
+  // so it's done manually -- which also keeps it pure and unit-testable from Node
+  // like the rest of this section.
+  const NAMED_ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+  function decodeEntities(str) {
+    return str.replace(/&(#x[0-9a-fA-F]+|#\d+|[a-zA-Z]+);/g, (whole, ref) => {
+      if (ref[0] === '#') {
+        const code = ref[1] === 'x' || ref[1] === 'X' ? parseInt(ref.slice(2), 16) : parseInt(ref.slice(1), 10);
+        return Number.isNaN(code) ? whole : String.fromCodePoint(code);
+      }
+      return NAMED_ENTITIES[ref] !== undefined ? NAMED_ENTITIES[ref] : whole;
+    });
+  }
+  function decodeAndStrip(fragment) {
+    if (!fragment) return '';
+    return decodeEntities(fragment.replace(/<[^>]*>/g, '')).replace(/\s+/g, ' ').trim();
+  }
+
+  // Every field in the export sits in one of these two-cell rows, varying only
+  // by label ("Nom", "Légende", "Nom de profil", ...).
+  function labelRowPattern(label) {
+    return new RegExp(`<td class="_a6_q">${label}<\\/td><td class="_2piu _a6_r">([\\s\\S]*?)<\\/td>`, 'g');
+  }
+  function extractRow(text, label) {
+    const m = labelRowPattern(label).exec(text);
+    return m ? decodeAndStrip(m[1]) : '';
+  }
+
+  // Finds the collection's own "Nom" row preceding its "Contenu multimédia"
+  // heading at `pos` -- same landmark-row approach as the reference prototype.
+  // Unlike extractRow, this wants the LAST "Nom" row in the window (the
+  // collection's own), not the first, which could belong to an earlier post's
+  // Propriétaire section still inside the 4000-char lookback.
+  function collectionNameBefore(raw, pos) {
+    const windowStart = Math.max(0, pos - 4000);
+    const chunk = raw.slice(windowStart, pos);
+    const re = labelRowPattern('Nom');
+    let lastMatch = null;
+    let m;
+    while ((m = re.exec(chunk)) !== null) lastMatch = m;
+    return lastMatch ? decodeAndStrip(lastMatch[1]) : '';
+  }
+
+  // Parses a Meta/Instagram "Download your information" saved-collections export.
+  // The markup is deeply and inconsistently nested, so rather than walking the DOM
+  // tree, we split on two kinds of landmark rows that reliably appear in a fixed
+  // order: each collection's own "Contenu multimédia" heading, and each post's own
+  // URL row within it (docs/reference/prototype/v0.0/clipping-box.html). Hashtags
+  // aren't extracted -- Tags are never auto-populated from imports (map #10 notes).
+  function parseInstagramExport(raw) {
+    const collStarts = [];
+    const collRe = /<h2[^>]*>Contenu multimédia<\/h2>/g;
+    let cm;
+    while ((cm = collRe.exec(raw)) !== null) collStarts.push(cm.index);
+
+    const urlRe = /<td colspan="2" class="_a6_q">URL<div><a target="_blank" href="(https:\/\/www\.instagram\.com\/[^"]+)">/g;
+    const urlMarks = [];
+    let um;
+    while ((um = urlRe.exec(raw)) !== null) urlMarks.push({ href: um[1], index: um.index });
+
+    const results = [];
+    let collIdx = -1;
+    let collectionName = '';
+    for (let i = 0; i < urlMarks.length; i++) {
+      const pos = urlMarks[i].index;
+      while (collIdx + 1 < collStarts.length && collStarts[collIdx + 1] <= pos) {
+        collIdx++;
+        collectionName = collectionNameBefore(raw, collStarts[collIdx]);
+      }
+      const start = pos;
+      const end = i + 1 < urlMarks.length ? urlMarks[i + 1].index : raw.length;
+      const slice = raw.slice(start, end);
+
+      const description = extractRow(slice, 'Légende');
+
+      let ownerName = '';
+      let ownerUsername = '';
+      const oSecM = slice.match(/<h2[^>]*>Propriétaire<\/h2>([\s\S]*?)(?:<h2|$)/);
+      if (oSecM) {
+        ownerName = extractRow(oSecM[1], 'Nom');
+        ownerUsername = extractRow(oSecM[1], 'Nom de profil');
+      }
+
+      results.push({ link: urlMarks[i].href, description, ownerName, ownerUsername, collectionName });
+    }
+    return results;
+  }
+
   function debounce(fn, delay) {
     let timer = null;
     return function debounced(...args) {
@@ -221,7 +311,7 @@
       <details class="menu" id="dataMenu">
         <summary class="btn-ghost">Data ▾</summary>
         <div class="menu-panel">
-          <button type="button" data-stub="1">Import export file…</button>
+          <button type="button" id="importFileBtn">Import export file…</button>
           <button type="button" data-stub="1">Download backup (JSON)</button>
           <button type="button" data-stub="1">Restore from backup…</button>
         </div>
@@ -579,6 +669,8 @@
     const addPostBtn = $('#addPostBtn'); if (addPostBtn) addPostBtn.addEventListener('click', () => openPostNew());
     const newCollBtn = $('#newCollBtn'); if (newCollBtn) newCollBtn.addEventListener('click', () => openCollectionModal());
     app.querySelectorAll('[data-stub]').forEach((btn) => btn.addEventListener('click', () => { closeAllMenus(); stubToast(); }));
+    const importFileBtn = $('#importFileBtn');
+    if (importFileBtn) importFileBtn.addEventListener('click', () => { closeAllMenus(); $('#importFileInput').click(); });
 
     attachDetailHandlers();
   }
@@ -926,6 +1018,111 @@
     render();
   }
 
+  // ---------------- Instagram export import ----------------
+  // Field mapping and standing decisions from the wayfinder map (issue #10):
+  // Description <- Légende; Title left to the server's auto-derivation (never
+  // sent explicitly here); Tags and Post Note are never touched by import;
+  // Collection <- Nom, auto-created on first sight, matched by trimmed exact
+  // name; dedup is exact-link, against existing Posts and within the batch;
+  // re-import only adds new Posts, never reassigns an existing Post's Collection
+  // (skipped posts are left completely alone).
+  async function resolveImportCollectionId(name, collectionByName, colorCounter) {
+    const trimmed = name.trim();
+    if (!trimmed) return null;
+    const existing = collectionByName.get(trimmed);
+    if (existing) return existing.id;
+    try {
+      const created = await apiPost('/api/collections', { name: trimmed, color: PALETTE[colorCounter.next++ % PALETTE.length] });
+      collectionByName.set(trimmed, created);
+      return created.id;
+    } catch (err) {
+      // A 409 here means the name differs from an existing collection only by
+      // case -- collections.name is UNIQUE COLLATE NOCASE (src/schema.sql) even
+      // though our own matching above is case-sensitive. Fall back to that
+      // collection instead of failing the whole import over a casing mismatch.
+      if (err.status === 409) {
+        const refreshed = await apiGet('/api/collections');
+        const match = refreshed.find((c) => c.name.trim().toLowerCase() === trimmed.toLowerCase());
+        if (match) { collectionByName.set(trimmed, match); return match.id; }
+      }
+      throw err;
+    }
+  }
+
+  async function performImport(file) {
+    let raw;
+    try {
+      raw = await file.text();
+    } catch {
+      showToast('Could not read that file');
+      return;
+    }
+    const parsed = parseInstagramExport(raw);
+    if (parsed.length === 0) {
+      showToast('Could not find any saved posts in that file');
+      return;
+    }
+
+    let freshCollections;
+    let existingPosts;
+    try {
+      [freshCollections, existingPosts] = await Promise.all([apiGet('/api/collections'), apiGet('/api/posts')]);
+    } catch (err) {
+      showToast(err.message);
+      return;
+    }
+    const collectionByName = new Map(freshCollections.map((c) => [c.name.trim(), c]));
+    const existingLinks = new Set(existingPosts.map((p) => p.link));
+    const colorCounter = { next: freshCollections.length };
+
+    let added = 0;
+    let skipped = 0;
+    let failed = 0;
+    const importedCollectionNames = new Set();
+    for (const post of parsed) {
+      if (existingLinks.has(post.link)) { skipped++; continue; }
+      try {
+        const collectionId = await resolveImportCollectionId(post.collectionName, collectionByName, colorCounter);
+        await apiPost('/api/posts', {
+          link: post.link,
+          provenance: 'instagram-import',
+          description: post.description,
+          owner_name: post.ownerName,
+          owner_username: post.ownerUsername,
+          collection_id: collectionId,
+        });
+        existingLinks.add(post.link);
+        if (post.collectionName.trim()) importedCollectionNames.add(post.collectionName.trim());
+        added++;
+      } catch {
+        failed++;
+      }
+    }
+
+    try {
+      await refreshAfterMutation();
+    } catch (err) {
+      showToast(err.message);
+      return;
+    }
+    const parts = [`Imported ${added} post${added === 1 ? '' : 's'}`];
+    if (importedCollectionNames.size) parts.push(`across ${importedCollectionNames.size} collection${importedCollectionNames.size === 1 ? '' : 's'}`);
+    if (skipped) parts.push(`skipped ${skipped} already saved`);
+    if (failed) parts.push(`${failed} failed`);
+    showToast(parts.join(', '));
+  }
+
+  function bindImportInputHandlers() {
+    const input = $('#importFileInput');
+    if (!input) return;
+    input.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      e.target.value = '';
+      if (!file) return;
+      await performImport(file);
+    });
+  }
+
   // ---------------- new collection modal ----------------
   function renderColorPicker() {
     $('#colorPicker').innerHTML = PALETTE.map((hex) => `<button type="button" data-color="${hex}" style="background:${hex}" class="${state.editingCollectionColor === hex ? 'selected' : ''}"></button>`).join('');
@@ -1051,12 +1248,13 @@
     bindCollectionModalHandlers();
     bindCollDeleteModalHandlers();
     bindConfirmModalHandlers();
+    bindImportInputHandlers();
     bindGlobalKeydown();
     init();
   }
 
   // Exposed for the pure-logic unit tests in test/frontend/helpers.test.js -- inert in the browser.
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { firstSentence, parseInstagramLink, buildPostsQuery, isVideoLink };
+    module.exports = { firstSentence, parseInstagramLink, buildPostsQuery, isVideoLink, parseInstagramExport };
   }
 })();
