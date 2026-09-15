@@ -1,0 +1,13 @@
+{
+  "name": "socials-organizer",
+  "version": "0.2.0",
+  "private": true,
+  "description": "A personal tool for organizing saved Instagram posts into collections.",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "start": "node src/server.js"
+  }
+}
