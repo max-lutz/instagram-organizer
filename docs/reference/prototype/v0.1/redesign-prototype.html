@@ -1,0 +1,1525 @@
+<!DOCTYPE html>
+<!--
+  PROTOTYPE — throwaway, not production code. Built for wayfinder ticket
+  "Prototype: visual redesign and dedicated Collection view".
+
+  Three radically different UI variants, switchable via ?variant=a|b|c
+  (also the floating bottom bar / arrow keys):
+    A — Sidebar: persistent left nav (collections list), card grid content.
+    B — Gallery: dark top-nav with collection pills, banner-style Collection
+        view, denser gallery cards.
+    C — List: dropdown-based nav, dense single-line list rows instead of
+        a card grid, note-card header for Collection view.
+
+  Data is in-memory mock data only — nothing persists, nothing is wired to
+  real storage. Answers "what should the new visual language look like" and
+  "what does a dedicated Collection view look like", not "does this work".
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Socials Organizer — redesign prototype</title>
+<style>
+  :root{
+    --bg:#F4F5F7;
+    --surface:#FFFFFF;
+    --surface-sunken:#ECEEF1;
+    --border:#DDE1E6;
+    --border-soft:#E8EAED;
+    --text:#1C222B;
+    --text-soft:#6B7280;
+    --text-faint:#9AA1AB;
+    --accent:#3B5BDB;
+    --accent-soft:#EBEFFC;
+    --danger:#C0392B;
+    --radius:10px;
+    --font-sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    --font-serif:Georgia,'Iowan Old Style','Times New Roman',serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--font-sans);
+    -webkit-font-smoothing:antialiased;
+  }
+  button,input,select,textarea{font-family:inherit;}
+  button{cursor:pointer;}
+  .hidden{display:none !important;}
+  a{color:inherit;}
+
+  /* ---------- shared: buttons ---------- */
+  .btn-primary{
+    background:var(--accent); color:#fff; border:none; border-radius:7px;
+    padding:9px 16px; font-size:13.5px; font-weight:600;
+  }
+  .btn-primary:hover{background:#3049B8;}
+  .btn-ghost{
+    background:transparent; border:1px solid var(--border); color:var(--text);
+    border-radius:7px; padding:8px 13px; font-size:13px;
+  }
+  .btn-ghost:hover{background:var(--surface-sunken);}
+  .btn-ghost.active{background:var(--text); color:#fff; border-color:var(--text);}
+  .btn-text{background:none; border:none; color:var(--text-soft); font-size:12.5px; padding:2px 0; text-decoration:none;}
+  .btn-text:hover{color:var(--text);}
+  .icon-btn{background:none; border:none; color:var(--text-soft); padding:4px; border-radius:5px; line-height:1;}
+  .icon-btn:hover{background:var(--surface-sunken); color:var(--text);}
+
+  /* ---------- shared: menus ---------- */
+  details.menu{position:relative;}
+  details.menu summary{list-style:none; cursor:pointer;}
+  details.menu summary::-webkit-details-marker{display:none;}
+  details.menu .menu-panel{
+    position:absolute; right:0; top:calc(100% + 6px); background:var(--surface);
+    border:1px solid var(--border); border-radius:8px; box-shadow:0 10px 30px rgba(20,25,35,.14);
+    padding:6px; min-width:200px; z-index:40;
+  }
+  details.menu .menu-panel button{
+    display:block; width:100%; text-align:left; background:none; border:none;
+    padding:8px 10px; font-size:13px; border-radius:6px; color:var(--text);
+  }
+  details.menu .menu-panel button:hover{background:var(--surface-sunken);}
+  details.menu[open] summary{background:var(--surface-sunken); border-radius:7px;}
+
+  /* ---------- shared: search / sort controls ---------- */
+  input.search{
+    background:var(--surface); border:1px solid var(--border); border-radius:7px;
+    padding:8px 12px; font-size:13.5px; color:var(--text); min-width:200px;
+  }
+  input.search::placeholder{color:var(--text-faint);}
+  select.sort{
+    background:var(--surface); border:1px solid var(--border); border-radius:7px;
+    padding:8px 10px; font-size:13px; color:var(--text);
+  }
+
+  /* ---------- shared: note placeholder ---------- */
+  .note-placeholder{color:var(--text-faint); font-style:italic;}
+
+  /* ================= Variant A — Sidebar ================= */
+  body[data-variant="a"]{background:var(--bg);}
+  .va-shell{display:flex; min-height:100vh;}
+  .va-sidebar{
+    width:236px; flex-shrink:0; background:var(--surface); border-right:1px solid var(--border);
+    padding:20px 14px; display:flex; flex-direction:column; gap:18px;
+    position:sticky; top:0; height:100vh; overflow-y:auto;
+  }
+  .va-brand{font-size:15px; font-weight:700; padding:0 6px;}
+  .va-newcoll{width:100%;}
+  .va-nav{display:flex; flex-direction:column; gap:2px;}
+  .va-nav-item{
+    display:flex; align-items:center; gap:9px; padding:8px 9px; border-radius:7px;
+    font-size:13.5px; color:var(--text-soft); background:none; border:none; text-align:left; width:100%;
+  }
+  .va-nav-item:hover{background:var(--surface-sunken); color:var(--text);}
+  .va-nav-item.active{background:var(--accent-soft); color:var(--accent); font-weight:600;}
+  .va-nav-item .count{margin-left:auto; font-size:11.5px; color:var(--text-faint);}
+  .va-nav-item.active .count{color:var(--accent);}
+  .va-dot{width:9px; height:9px; border-radius:50%; flex-shrink:0;}
+  .va-nav-sep{height:1px; background:var(--border-soft); margin:6px 4px;}
+  .va-nav-label{font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-faint); padding:0 9px; margin-top:4px;}
+
+  .va-main{flex:1; min-width:0; padding:0 34px 60px;}
+  .va-sticky-top{padding-top:26px;}
+  .va-sticky-top.is-sticky{position:sticky; top:0; z-index:15; background:var(--bg);}
+  .va-topbar{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:22px;}
+  .va-topbar .spacer{flex:1;}
+  .va-heading{display:flex; align-items:baseline; gap:10px; margin-bottom:18px;}
+  .va-heading h1{font-size:21px; margin:0; font-weight:700;}
+  .va-heading .count{color:var(--text-faint); font-size:13px;}
+
+  .va-collheader{
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    padding:16px 22px 20px; margin-bottom:22px; display:flex; gap:16px; align-items:flex-start;
+  }
+  .va-collheader .row{display:flex; align-items:center; gap:10px; margin-top:10px;}
+  .swatch-wrap{position:relative; flex-shrink:0;}
+  .swatch-btn{
+    width:30px; height:30px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px var(--border);
+    padding:0; margin-top:4px; display:block;
+  }
+  .swatch-btn:hover{box-shadow:0 0 0 1px var(--border), 0 0 0 4px var(--surface-sunken);}
+  .color-popover{
+    position:absolute; top:calc(100% + 8px); left:0; z-index:50; background:var(--surface);
+    border:1px solid var(--border); border-radius:10px; padding:10px; box-shadow:0 10px 30px rgba(20,25,35,.16);
+  }
+  .va-collheader .name-input{
+    font-size:19px; font-weight:700; border:1px solid transparent; background:none; padding:4px 6px;
+    border-radius:6px; width:100%; margin:-4px 0 4px -6px; color:var(--text);
+  }
+  .va-collheader .name-input:hover{background:var(--surface-sunken);}
+  .va-collheader .name-input:focus{background:#fff; border-color:var(--border); outline:none; box-shadow:0 0 0 3px var(--accent-soft);}
+  .va-collheader .note-input-inline{
+    font-family:var(--font-serif); font-size:15px; line-height:1.55; color:var(--text); max-width:64ch;
+    width:100%; border:1px solid transparent; background:none; padding:5px 6px; border-radius:6px;
+    resize:vertical; min-height:46px; margin-left:-6px;
+  }
+  .va-collheader .note-input-inline::placeholder{color:var(--text-faint); font-style:italic;}
+  .va-collheader .note-input-inline:hover{background:var(--surface-sunken);}
+  .va-collheader .note-input-inline:focus{background:#fff; border-color:var(--border); outline:none; box-shadow:0 0 0 3px var(--accent-soft);}
+
+  .va-content-row{display:flex; gap:24px; align-items:flex-start;}
+  .va-grid-wrap{flex:1; min-width:0;}
+  .va-detail{
+    flex-shrink:0; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    position:sticky; top:26px; max-height:calc(100vh - 52px);
+    width:80%; display:flex; flex-direction:column; overflow:hidden;
+  }
+  .va-detail h2{font-size:17px; margin:0; font-weight:700;}
+  .va-detail-scroll{overflow-y:auto; padding:20px 22px 0; flex:1; min-height:0;}
+  .va-detail .modal-actions{flex-shrink:0; margin:0; padding:14px 22px 20px; border-top:1px solid var(--border-soft);}
+  .va-detail-body{display:flex; gap:20px; align-items:stretch; margin-bottom:16px;}
+  .va-detail-media{width:300px; flex-shrink:0; display:flex; flex-direction:column; gap:6px;}
+  .va-detail-media iframe{width:100%; height:clamp(260px, 50vh, 480px); border:none; border-radius:8px; background:#f2f2f2; display:block;}
+  .va-detail-media .embed-note{font-size:11px; color:var(--text-soft); line-height:1.4;}
+  .va-detail-fields{flex:1; min-width:320px; display:flex; flex-direction:column; gap:10px;}
+  .va-detail-fields .field{margin-bottom:0;}
+  .va-detail-row{display:flex; gap:10px; flex-wrap:wrap;}
+  .va-detail-row .field-link{flex:2; min-width:0;}
+  .va-detail-row .field-title{flex:1.5; min-width:150px;}
+  .va-detail-row .field-collection{flex:1; min-width:140px;}
+  .va-detail-textareas{display:flex; gap:12px; flex:1; min-height:0;}
+  .va-detail-fields .field-note{flex:1; display:flex; flex-direction:column; min-height:0;}
+  .va-detail-fields .field-note textarea.note-input{flex:1; min-height:60px; resize:none;}
+  .va-detail-fields .field-note label{white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+
+  .va-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(232px,1fr)); gap:14px;}
+  .va-card{
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    padding:15px 16px; display:flex; flex-direction:column; gap:9px; cursor:pointer; position:relative;
+  }
+  .va-card:hover{border-color:#C7CCD4; box-shadow:0 4px 14px rgba(20,25,35,.06);}
+  .va-card.unsorted{border-style:dashed;}
+  .va-card.selected{border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-soft);}
+  .va-card.dragging{opacity:.45;}
+  .va-card-top{display:flex; align-items:flex-start; justify-content:space-between; gap:8px;}
+  .va-coll-chip{display:flex; align-items:center; gap:6px; font-size:11.5px; font-weight:600;}
+  .va-coll-chip .va-dot{width:7px; height:7px;}
+  .post-textblock{flex:1; min-height:0; display:flex; flex-direction:column; gap:3px;}
+  .post-title{font-weight:700; font-size:14px; line-height:1.3; flex-shrink:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .post-desc{font-family:var(--font-serif); font-size:14px; line-height:1.5; color:var(--text); flex:1; min-height:0;
+    display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;}
+  .va-card-bottom{display:flex; align-items:center; justify-content:space-between; font-size:11.5px; color:var(--text-faint);}
+  .va-card-bottom a{text-decoration:none; color:var(--text-soft);}
+  .va-card-bottom a:hover{color:var(--accent);}
+  .va-nav-item.drop-target{background:var(--accent-soft) !important; outline:2px dashed var(--accent); outline-offset:-2px;}
+
+  .va-group{margin-bottom:28px;}
+  .va-group:last-child{margin-bottom:0;}
+  .va-group-heading{display:flex; align-items:center; gap:8px; font-size:14px; font-weight:700; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid var(--border-soft);}
+  .va-group-heading .count{font-weight:400; color:var(--text-faint); font-size:12.5px;}
+
+  .tag-row{position:relative; display:flex; align-items:center; gap:6px; flex-wrap:wrap; min-width:0;}
+  .tag-pill{display:inline-flex; align-items:center; gap:5px; padding:3px 6px 3px 10px; border-radius:999px; font-size:12px; font-weight:600; border:1px solid transparent; white-space:nowrap;}
+  .tag-pill-name{background:none; border:none; padding:0; font:inherit; color:inherit; cursor:pointer;}
+  .tag-pill-x{background:none; border:none; padding:0 2px; margin-left:1px; color:inherit; opacity:.55; font-size:11px; line-height:1; cursor:pointer;}
+  .tag-pill-x:hover{opacity:1;}
+  .tag-pill-add{background:var(--surface-sunken); color:var(--text-soft); border:1px dashed var(--border); padding:3px 10px; opacity:.85;}
+  .tag-pill-add:hover{opacity:1; background:var(--border-soft);}
+  .tag-popover{
+    position:absolute; top:calc(100% + 8px); left:0; z-index:60; width:230px;
+    background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:10px;
+    box-shadow:0 10px 30px rgba(20,25,35,.16);
+  }
+  .tag-popover input{width:100%; padding:7px 9px; border:1px solid var(--border); border-radius:6px; font-size:13px; margin-bottom:8px; font-family:inherit;}
+  .tag-options{display:flex; flex-direction:column; gap:2px; max-height:160px; overflow-y:auto;}
+  .tag-option{display:flex; align-items:center; gap:7px; padding:6px 8px; border-radius:6px; background:none; border:none; font-size:13px; text-align:left; color:var(--text);}
+  .tag-option:hover{background:var(--surface-sunken);}
+  .tag-option-create{color:var(--accent); font-weight:600;}
+  .tag-empty{font-size:12px; color:var(--text-faint); padding:6px 4px;}
+
+  /* ================= Variant B — Gallery (dark) ================= */
+  body[data-variant="b"]{background:#14171C; color:#E7E9EC;}
+  body[data-variant="b"] .note-placeholder{color:#6E7480;}
+  .vb-shell{max-width:1180px; margin:0 auto; padding:0 30px 60px;}
+  .vb-header{display:flex; align-items:center; gap:14px; padding:26px 0 16px;}
+  .vb-brand{font-size:17px; font-weight:700; color:#fff;}
+  .vb-header .spacer{flex:1;}
+  body[data-variant="b"] input.search{background:#1F242C; border-color:#2C323C; color:#E7E9EC;}
+  body[data-variant="b"] select.sort{background:#1F242C; border-color:#2C323C; color:#E7E9EC;}
+  body[data-variant="b"] .btn-ghost{border-color:#2C323C; color:#E7E9EC;}
+  body[data-variant="b"] .btn-ghost:hover{background:#1F242C;}
+  body[data-variant="b"] details.menu .menu-panel{background:#1F242C; border-color:#2C323C;}
+  body[data-variant="b"] details.menu .menu-panel button{color:#E7E9EC;}
+  body[data-variant="b"] details.menu .menu-panel button:hover{background:#262C36;}
+
+  .vb-pillrow{display:flex; gap:8px; flex-wrap:wrap; padding-bottom:20px; border-bottom:1px solid #23282F; margin-bottom:22px;}
+  .vb-pill{
+    background:#1B1F26; border:1px solid #262C35; color:#C6CAD2; border-radius:999px;
+    padding:7px 14px; font-size:12.5px; display:flex; align-items:center; gap:7px;
+  }
+  .vb-pill:hover{border-color:#3A414D;}
+  .vb-pill.active{background:#fff; color:#14171C; border-color:#fff; font-weight:600;}
+  .vb-pill .va-dot{width:7px; height:7px;}
+
+  .vb-heading{display:flex; align-items:baseline; gap:10px; margin-bottom:16px;}
+  .vb-heading h1{font-size:19px; margin:0; font-weight:700; color:#fff;}
+  .vb-heading .count{color:#7A8190; font-size:12.5px;}
+
+  .vb-banner{border-radius:14px; padding:28px 30px; margin-bottom:24px; position:relative; overflow:hidden;}
+  .vb-banner h1{font-size:24px; margin:0 0 10px; color:#fff;}
+  .vb-banner .note{font-family:var(--font-serif); font-size:16px; line-height:1.6; color:rgba(255,255,255,.92); max-width:66ch;}
+  .vb-banner .row{display:flex; gap:10px; margin-top:14px;}
+  .vb-banner .row .btn-ghost{border-color:rgba(255,255,255,.35); color:#fff;}
+  .vb-banner .row .btn-ghost:hover{background:rgba(255,255,255,.12);}
+
+  .vb-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(228px,1fr)); gap:16px;}
+  .vb-card{background:#1B1F26; border:1px solid #262C35; border-radius:12px; overflow:hidden; cursor:pointer; position:relative;}
+  .vb-card:hover{border-color:#3A414D; transform:translateY(-2px); box-shadow:0 10px 24px rgba(0,0,0,.35);}
+  .vb-media{height:96px; position:relative; display:flex; align-items:center; justify-content:center;}
+  .vb-media .label{position:absolute; left:9px; bottom:8px; font-size:10.5px; font-weight:700; color:rgba(255,255,255,.92); background:rgba(0,0,0,.28); padding:3px 8px; border-radius:999px;}
+  .vb-card-body{padding:13px 14px 14px; display:flex; flex-direction:column; gap:8px;}
+  .vb-card .post-title{color:#fff;}
+  .vb-card .post-desc{color:#DADDE2; -webkit-line-clamp:3;}
+  .vb-card-bottom{display:flex; align-items:center; justify-content:space-between; font-size:11px; color:#7A8190;}
+  .vb-card-bottom a{text-decoration:none; color:#9AA1AB;}
+  .vb-card-bottom a:hover{color:#fff;}
+  body[data-variant="b"] .icon-btn{color:#9AA1AB;}
+  body[data-variant="b"] .icon-btn:hover{background:#262C36; color:#fff;}
+
+  /* ================= Variant C — List ================= */
+  .vc-shell{max-width:920px; margin:0 auto; padding:0 28px 60px;}
+  .vc-topbar{display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:24px 0 6px;}
+  .vc-brand{font-size:14px; color:var(--text-faint);}
+  .vc-view-select{
+    font-size:16px; font-weight:700; border:none; background:none; color:var(--text);
+    padding:2px 4px; border-radius:6px; max-width:260px;
+  }
+  .vc-view-select:hover{background:var(--surface-sunken);}
+  .vc-topbar .spacer{flex:1;}
+
+  .vc-notecard{
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    padding:16px 18px; margin:14px 0 18px; display:flex; gap:12px; align-items:flex-start;
+  }
+  .vc-notecard .swatch{width:12px; height:12px; border-radius:50%; margin-top:5px; flex-shrink:0;}
+  .vc-notecard .note{font-family:var(--font-serif); font-size:14.5px; line-height:1.55; flex:1;}
+  .vc-notecard .row{margin-top:8px;}
+
+  .vc-list{border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); overflow:hidden;}
+  .vc-row{
+    display:flex; align-items:center; gap:12px; padding:11px 16px; border-bottom:1px solid var(--border-soft);
+    cursor:pointer;
+  }
+  .vc-row:last-child{border-bottom:none;}
+  .vc-row:hover{background:var(--surface-sunken);}
+  .vc-row .va-dot{width:8px; height:8px; flex-shrink:0;}
+  .vc-row .note{font-family:var(--font-serif); font-size:13.5px; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .vc-row .coll{font-size:11.5px; color:var(--text-soft); width:150px; flex-shrink:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .vc-row .date{font-size:11px; color:var(--text-faint); width:64px; flex-shrink:0; text-align:right;}
+  .vc-row .actions{display:flex; gap:2px; flex-shrink:0; opacity:0; }
+  .vc-row:hover .actions{opacity:1;}
+  .vc-list-head{display:flex; gap:12px; padding:8px 16px; font-size:11px; color:var(--text-faint); text-transform:uppercase; letter-spacing:.03em;}
+  .vc-list-head .coll{width:150px; flex-shrink:0;}
+  .vc-list-head .date{width:64px; flex-shrink:0; text-align:right;}
+
+  /* ---------- shared: empty state ---------- */
+  .empty{text-align:center; padding:70px 20px; color:var(--text-soft);}
+  body[data-variant="b"] .empty{color:#9AA1AB;}
+  .empty h2{font-size:17px; margin:0 0 8px; font-weight:700;}
+  .empty p{font-size:13.5px; max-width:44ch; margin:0 auto; line-height:1.5;}
+
+  /* ---------- shared: modals ---------- */
+  .overlay{
+    position:fixed; inset:0; background:rgba(15,18,24,.5);
+    display:flex; align-items:center; justify-content:center; padding:20px; z-index:70;
+  }
+  .modal{
+    background:#fff; color:var(--text); border-radius:12px; padding:26px; width:100%; max-width:460px;
+    max-height:88vh; overflow-y:auto; box-shadow:0 24px 60px rgba(0,0,0,.35);
+  }
+  .modal h2{font-size:18px; margin:0 0 18px; font-weight:700;}
+  .field{margin-bottom:14px;}
+  .field label{display:block; font-size:12px; color:var(--text-soft); margin-bottom:5px; font-weight:600;}
+  .field input, .field select, .field textarea{
+    width:100%; padding:9px 11px; border:1px solid var(--border); border-radius:7px;
+    background:#fff; color:var(--text); font-size:14px; font-family:inherit;
+  }
+  .field textarea.note-input{font-family:var(--font-serif); font-size:15px; min-height:76px; resize:vertical;}
+  .modal-actions{display:flex; justify-content:flex-end; gap:10px; margin-top:6px;}
+  .modal-actions .btn-danger{background:var(--danger); color:#fff; border:none; border-radius:7px; padding:9px 16px; font-size:13.5px; font-weight:600;}
+
+  .swatch-picker{display:flex; flex-wrap:wrap; gap:8px;}
+  .swatch-picker button{
+    width:26px; height:26px; border-radius:50%; border:2px solid transparent; padding:0;
+  }
+  .swatch-picker button.selected{border-color:var(--text);}
+
+  .embed-wrap{margin-bottom:16px;}
+  .embed-wrap iframe{width:100%; min-width:280px; border:none; min-height:400px; border-radius:8px; background:#f2f2f2; display:block;}
+  .embed-note{font-size:11px; color:var(--text-soft); margin-top:6px; line-height:1.4;}
+
+  /* ---------- shared: toast ---------- */
+  .toast{
+    position:fixed; bottom:78px; left:50%; transform:translateX(-50%);
+    background:var(--text); color:#fff; padding:10px 18px; border-radius:8px;
+    font-size:13px; z-index:90; opacity:0; pointer-events:none; transition:opacity .25s ease; max-width:90vw; text-align:center;
+  }
+  .toast.show{opacity:1;}
+
+  /* ---------- prototype switcher bar (not part of the design) ---------- */
+  .switcher{
+    position:fixed; bottom:18px; left:50%; transform:translateX(-50%);
+    background:#14171C; color:#fff; border-radius:999px; padding:6px 6px 6px 14px;
+    display:flex; align-items:center; gap:10px; box-shadow:0 8px 24px rgba(0,0,0,.35); z-index:100;
+    font-size:12.5px; font-family:var(--font-sans);
+  }
+  .switcher button{
+    background:rgba(255,255,255,.12); border:none; color:#fff; width:26px; height:26px;
+    border-radius:50%; font-size:13px; line-height:1;
+  }
+  .switcher button:hover{background:rgba(255,255,255,.22);}
+  .switcher .label{min-width:150px; text-align:center;}
+  .switcher .label b{font-weight:700;}
+</style>
+</head>
+<body data-variant="a">
+
+<div id="app"></div>
+
+<!-- Post add/edit modal (shared across variants) -->
+<div class="overlay hidden" id="postOverlay">
+  <div class="modal">
+    <h2 id="postModalTitle">Add a Post</h2>
+    <div class="embed-wrap hidden" id="embedWrap">
+      <div id="embedInner"></div>
+      <div class="embed-note">Live preview from Instagram — if it doesn't load (private posts sometimes can't be embedded), use Open post below.</div>
+    </div>
+    <form id="postForm">
+      <div class="field">
+        <label for="f-link">Link</label>
+        <input type="url" id="f-link" placeholder="https://instagram.com/p/…" required>
+      </div>
+      <div class="field">
+        <label for="f-collection">Collection</label>
+        <select id="f-collection"></select>
+      </div>
+      <div class="field">
+        <label for="f-title">Title</label>
+        <input type="text" id="f-title" placeholder="First sentence of the description, or your own title">
+      </div>
+      <div class="field">
+        <label for="f-description">Description — the post's caption on Instagram</label>
+        <textarea id="f-description" class="note-input" placeholder="Paste or edit the caption/legend for this post"></textarea>
+      </div>
+      <div class="field">
+        <label for="f-post-note">Post Note — your own private note</label>
+        <textarea id="f-post-note" class="note-input" placeholder="Why did you save this? (optional)"></textarea>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" id="postCancel">Cancel</button>
+        <button type="submit" class="btn-primary">Save Post</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Collection add/edit modal (shared across variants) -->
+<div class="overlay hidden" id="collectionOverlay">
+  <div class="modal">
+    <h2 id="collModalTitle">New Collection</h2>
+    <form id="collectionForm">
+      <div class="field">
+        <label for="c-name">Name</label>
+        <input type="text" id="c-name" placeholder="e.g. Weeknight dinners" required>
+      </div>
+      <div class="field">
+        <label>Color</label>
+        <div class="swatch-picker" id="colorPicker"></div>
+      </div>
+      <div class="field">
+        <label for="c-note">Collection Note — what's this collection for?</label>
+        <textarea id="c-note" class="note-input" placeholder="e.g. Fast, low-effort recipes for busy weekdays"></textarea>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" id="collCancel">Cancel</button>
+        <button type="submit" class="btn-primary">Save Collection</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Confirm modal -->
+<div class="overlay hidden" id="confirmOverlay">
+  <div class="modal" style="max-width:380px;">
+    <h2 id="confirmTitle">Are you sure?</h2>
+    <p style="font-size:13px; color:var(--text-soft); margin-top:-8px;" id="confirmBody"></p>
+    <div class="modal-actions">
+      <button type="button" class="btn-ghost" id="confirmCancel">Cancel</button>
+      <button type="button" class="btn-danger" id="confirmOk">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Prototype-only: variant switcher, not part of the design being evaluated -->
+<div class="switcher" id="switcher">
+  <button id="switchPrev" aria-label="Previous variant">←</button>
+  <span class="label" id="switchLabel"></span>
+  <button id="switchNext" aria-label="Next variant">→</button>
+</div>
+
+<script>
+(function(){
+  const PALETTE = ['#B5533C','#4C6B8A','#6B7A4F','#B8863B','#7A5670','#3D6E8F','#9C5B8C','#5E7A9A','#A6763C','#4A7C6B','#8C6B47','#6E5B8C'];
+  const VARIANTS = [
+    {key:'a', name:'Sidebar'},
+    {key:'b', name:'Gallery'},
+    {key:'c', name:'List'},
+  ];
+
+  const now = Date.now();
+  const daysAgo = (n) => now - n*86400000;
+
+  let collections = [
+    {id:'c1', name:'Weeknight dinners', color:PALETTE[0], note:'Fast, low-effort recipes for busy weekdays — nothing over 30 minutes.'},
+    {id:'c2', name:'Someday travel', color:PALETTE[1], note:'Places and itineraries to revisit whenever we actually plan a trip.'},
+    {id:'c3', name:'Apartment projects', color:PALETTE[4], note:'Small renovation and styling ideas for the living room and balcony.'},
+    {id:'c4', name:'Workout ideas', color:PALETTE[6], note:''},
+  ];
+
+  // tags are a reusable, global set (name + color) — many-to-many with posts, max 4 per post;
+  // imported/new posts start with none, same as a fresh Post Note.
+  let tags = [
+    {id:'t1', name:'to-try', color:PALETTE[3]},
+    {id:'t2', name:'advice', color:PALETTE[7]},
+    {id:'t3', name:'reference', color:PALETTE[9]},
+  ];
+
+  // description mirrors what Instagram's own caption/legend would default to on import;
+  // title defaults to its first sentence but either can be edited independently after.
+  function firstSentence(text){
+    if(!text) return '';
+    const m = text.match(/[^.!?]*[.!?]/);
+    return (m ? m[0] : text).trim();
+  }
+  function makePost(id, link, description, collectionId, createdAt, tagIds){
+    return {id, link, description, title: firstSentence(description), titleManual: false, note: '', collectionId, createdAt, tagIds: tagIds || []};
+  }
+  let posts = [
+    makePost('p1', 'https://www.instagram.com/p/C1weeknt01/', 'Sheet-pan chicken thighs with lemon and olives. Excellent for a lazy weeknight — one pan, minimal cleanup.', 'c1', daysAgo(2), ['t1']),
+    makePost('p2', 'https://www.instagram.com/p/C1weeknt02/', '15-minute garlicky white beans on toast. Good with a fried egg on top.', 'c1', daysAgo(5), ['t1','t3']),
+    makePost('p3', 'https://www.instagram.com/reel/C1weeknt03/', '', 'c1', daysAgo(9)),
+    makePost('p4', 'https://www.instagram.com/p/C2travel01/', 'Boat trip along the Dalmatian coast. Save for a proper summer trip, maybe 2027.', 'c2', daysAgo(1), ['t3']),
+    makePost('p5', 'https://www.instagram.com/p/C2travel02/', 'Night train from Vienna to Venice. Apparently still running, surprisingly cheap.', 'c2', daysAgo(14), ['t3']),
+    makePost('p6', 'https://www.instagram.com/reel/C2travel03/', 'Tiny mountain town in the Dolomites. Exactly one restaurant, worth the detour.', 'c2', daysAgo(20), ['t2','t3']),
+    makePost('p7', 'https://www.instagram.com/p/C3apt01/', 'Built-in shelving idea for the awkward alcove. Good use of the space by the window.', 'c3', daysAgo(3), ['t2']),
+    makePost('p8', 'https://www.instagram.com/p/C3apt02/', 'Balcony herb garden using a vertical planter. Need to double check drainage before buying.', 'c3', daysAgo(11), ['t2','t1']),
+    makePost('p9', 'https://www.instagram.com/reel/C4gym01/', '20-minute kettlebell circuit. No repeated moves, good for a quick session.', 'c4', daysAgo(4), ['t1']),
+    makePost('p10', 'https://www.instagram.com/reel/C4gym02/', '', 'c4', daysAgo(16)),
+    makePost('p11', 'https://www.instagram.com/p/Unsorted01/', "Not sure yet. Saved from a friend's story, revisit later.", null, daysAgo(0)),
+    makePost('p12', 'https://www.instagram.com/p/Unsorted02/', '', null, daysAgo(1)),
+    makePost('p13', 'https://www.instagram.com/reel/Unsorted03/', 'Recipe looked interesting. Forgot why exactly I saved it though.', null, daysAgo(6)),
+  ];
+
+  let state = {
+    variant: 'a',
+    view: 'all', // 'all' | 'unsorted' | 'collection:<id>'
+    search: '',
+    sort: 'newest',
+    editingPostId: null,
+    editingCollectionId: null,
+    editingCollectionColor: PALETTE[0],
+    pendingConfirm: null,
+    detailMode: null, // variant A only: null | 'new' | <postId> — the inline detail panel
+    colorPopoverFor: null, // variant A only: collection id whose color popover is open
+    groupByTag: false, // variant A only: group the current view's posts by tag instead of a flat grid
+    tagAdderOpen: false, // variant A only: is the "+ Add tag" popover open on the currently open post
+    tagQuery: '', // variant A only: search text inside the tag adder popover
+    tagEditingId: null, // variant A only: tag id whose rename/recolor popover is open
+  };
+  let newPostTitleManual = false; // variant A: has the title been hand-edited for the post currently being created
+  let modalTitleManual = false; // variants B/C shared modal: same idea, scoped to the modal's open lifetime
+  let newPostTagIds = []; // variant A: tags staged for the post currently being created
+
+  const $ = (sel) => document.querySelector(sel);
+  const uid = (p) => p + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+  const escapeHtml = (str) => (str || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  function hexToRgb(hex){
+    const h = hex.replace('#','');
+    const n = parseInt(h.length===3 ? h.split('').map(c=>c+c).join('') : h, 16);
+    return {r:(n>>16)&255, g:(n>>8)&255, b:n&255};
+  }
+  function rgba(hex, alpha){ const {r,g,b} = hexToRgb(hex); return `rgba(${r},${g},${b},${alpha})`; }
+
+  function getCollection(id){ return collections.find(c => c.id === id) || null; }
+  function getTag(id){ return tags.find(t => t.id === id) || null; }
+  function tagsForPost(p){ return (p.tagIds || []).map(getTag).filter(Boolean); }
+  function currentTagIds(){
+    if(state.detailMode === 'new') return newPostTagIds;
+    const p = posts.find(x => x.id === state.detailMode);
+    return p ? (p.tagIds || []) : [];
+  }
+  function isVideoLink(link){ return /instagram\.com\/(reel|tv)\//i.test(link || ''); }
+  function parseInstagramLink(link){
+    const m = (link || '').match(/instagram\.com\/(p|reel|tv)\/([^/?]+)/i);
+    if(!m) return null;
+    return {type: m[1].toLowerCase(), code: m[2]};
+  }
+  function formatDate(ts){
+    const d = new Date(ts);
+    return d.toLocaleDateString(undefined, {month:'short', day:'numeric'});
+  }
+
+  function postsForView(){
+    if(state.view === 'unsorted') return posts.filter(p => !p.collectionId);
+    if(state.view.startsWith('collection:')) return posts.filter(p => p.collectionId === state.view.slice(11));
+    return posts;
+  }
+
+  function visiblePosts(){
+    let list = postsForView();
+    if(state.search){
+      const q = state.search.toLowerCase();
+      list = list.filter(p => {
+        const coll = getCollection(p.collectionId);
+        const hay = [p.title, p.description, p.link, coll ? coll.name : ''].join(' ').toLowerCase();
+        return hay.includes(q);
+      });
+    }
+    list = list.slice();
+    if(state.sort === 'oldest') list.sort((a,b) => a.createdAt - b.createdAt);
+    else if(state.sort === 'collection') list.sort((a,b) => {
+      const an = getCollection(a.collectionId)?.name || '￿';
+      const bn = getCollection(b.collectionId)?.name || '￿';
+      return an.localeCompare(bn);
+    });
+    else list.sort((a,b) => b.createdAt - a.createdAt);
+    return list;
+  }
+
+  function showToast(msg){
+    const t = $('#toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(() => t.classList.remove('show'), 2400);
+  }
+  function stubToast(){ showToast('Prototype only — not wired to real data'); }
+
+  // ---------------- shared bits used inside variant markup ----------------
+  function dataMenuHtml(){
+    return `
+      <details class="menu" id="dataMenu">
+        <summary class="btn-ghost">Data ▾</summary>
+        <div class="menu-panel">
+          <button type="button" data-stub="1">Import export file…</button>
+          <button type="button" data-stub="1">Download backup (JSON)</button>
+          <button type="button" data-stub="1">Restore from backup…</button>
+        </div>
+      </details>`;
+  }
+  function sortSelectHtml(){
+    return `
+      <select class="sort" id="sortSelect">
+        <option value="newest" ${state.sort==='newest'?'selected':''}>Newest saved</option>
+        <option value="oldest" ${state.sort==='oldest'?'selected':''}>Oldest saved</option>
+        <option value="collection" ${state.sort==='collection'?'selected':''}>Collection (A–Z)</option>
+      </select>`;
+  }
+  function viewTitle(){
+    if(state.view === 'unsorted') return 'To sort';
+    if(state.view.startsWith('collection:')) return getCollection(state.view.slice(11))?.name || 'Collection';
+    return 'All posts';
+  }
+
+  // ================= Variant A — Sidebar =================
+  function renderA(){
+    const unsortedCount = posts.filter(p => !p.collectionId).length;
+    const nav = `
+      <div class="va-sidebar">
+        <div class="va-brand">Socials Organizer</div>
+        <button class="btn-ghost va-newcoll" id="newCollBtn">+ New collection</button>
+        <div class="va-nav">
+          <button class="va-nav-item ${state.view==='all'?'active':''}" data-view="all">All posts <span class="count">${posts.length}</span></button>
+          <button class="va-nav-item ${state.view==='unsorted'?'active':''}" data-view="unsorted">To sort <span class="count">${unsortedCount}</span></button>
+        </div>
+        <div>
+          <div class="va-nav-label">Collections</div>
+          <div class="va-nav">
+            ${collections.map(c => {
+              const n = posts.filter(p => p.collectionId===c.id).length;
+              const active = state.view==='collection:'+c.id;
+              const style = `border-left:3px solid ${c.color};` + (active ? `background:${rgba(c.color,0.14)}; color:${c.color};` : '');
+              return `<button class="va-nav-item ${active?'active':''}" data-view="collection:${c.id}" style="${style}">
+                <span class="va-dot" style="background:${c.color}"></span><span class="nav-name">${escapeHtml(c.name)}</span> <span class="count">${n}</span>
+              </button>`;
+            }).join('')}
+          </div>
+        </div>
+      </div>`;
+
+    const topbar = `
+      <div class="va-topbar">
+        <input type="text" class="search" id="searchInput" placeholder="Search notes, links…" value="${escapeHtml(state.search)}">
+        ${sortSelectHtml()}
+        <div class="spacer"></div>
+        <button class="btn-ghost ${state.groupByTag ? 'active' : ''}" id="groupByTagBtn">Group by tag</button>
+        <button class="btn-ghost" id="bulkBtn">Add several links</button>
+        ${dataMenuHtml()}
+        <button class="btn-primary" id="addPostBtn">+ Add a link</button>
+      </div>`;
+
+    let headerBlock = '';
+    if(state.view.startsWith('collection:')){
+      const c = getCollection(state.view.slice(11));
+      if(c){
+        headerBlock = `
+          <div class="va-collheader" style="border-top:4px solid ${c.color}">
+            <div class="swatch-wrap">
+              <button type="button" class="swatch-btn" data-action="color-swatch" data-id="${c.id}" style="background:${c.color}" title="Change color"></button>
+              ${state.colorPopoverFor === c.id ? colorPopoverHtml(c) : ''}
+            </div>
+            <div style="flex:1; min-width:0;">
+              <input type="text" id="coll-name-input" data-id="${c.id}" class="name-input" value="${escapeHtml(c.name)}" placeholder="Collection name">
+              <textarea id="coll-note-input" data-id="${c.id}" class="note-input-inline" placeholder="Add a Collection Note — what's this collection for?">${escapeHtml(c.note)}</textarea>
+            </div>
+          </div>`;
+      }
+    } else {
+      headerBlock = `<div class="va-heading"><h1>${viewTitle()}</h1><span class="count">${postsForView().length} posts</span></div>`;
+    }
+
+    const list = visiblePosts();
+    const grid = !list.length
+      ? emptyBlock()
+      : state.groupByTag
+        ? renderGroupedByTag(list)
+        : `<div class="va-grid">${list.map(cardA).join('')}</div>`;
+    const detailOpen = state.detailMode !== null;
+    const stickyTopActive = detailOpen || state.view.startsWith('collection:');
+    const topBlock = `<div class="va-sticky-top ${stickyTopActive ? 'is-sticky' : ''}">${topbar}${headerBlock}</div>`;
+    const gridArea = detailOpen
+      ? `<div class="va-content-row">${renderDetailPanel()}<div class="va-grid-wrap">${grid}</div></div>`
+      : grid;
+
+    return `<div class="va-shell">${nav}<div class="va-main">${topBlock}${gridArea}</div></div>`;
+  }
+  function renderGroupedByTag(list){
+    const groups = new Map(); // '__untagged__' | tagId -> posts[], in list order
+    list.forEach(p => {
+      const postTags = tagsForPost(p);
+      if(postTags.length === 0){
+        if(!groups.has('__untagged__')) groups.set('__untagged__', []);
+        groups.get('__untagged__').push(p);
+      } else {
+        postTags.forEach(t => {
+          if(!groups.has(t.id)) groups.set(t.id, []);
+          groups.get(t.id).push(p);
+        });
+      }
+    });
+    const orderedKeys = [...groups.keys()].sort((a, b) => {
+      if(a === '__untagged__') return -1;
+      if(b === '__untagged__') return 1;
+      return getTag(a).name.localeCompare(getTag(b).name);
+    });
+    return orderedKeys.map(key => {
+      const groupPosts = groups.get(key);
+      const heading = key === '__untagged__'
+        ? `No tags <span class="count">${groupPosts.length}</span>`
+        : `<span class="va-dot" style="background:${getTag(key).color}"></span>${escapeHtml(getTag(key).name)} <span class="count">${groupPosts.length}</span>`;
+      return `<div class="va-group"><div class="va-group-heading">${heading}</div><div class="va-grid">${groupPosts.map(cardA).join('')}</div></div>`;
+    }).join('');
+  }
+  function colorPopoverHtml(c){
+    return `<div class="color-popover" id="colorPopover">
+      <div class="swatch-picker">${PALETTE.map(hex => `<button type="button" data-action="pick-color" data-id="${c.id}" data-color="${hex}" style="background:${hex}" class="${c.color===hex?'selected':''}"></button>`).join('')}</div>
+    </div>`;
+  }
+  function tagRowHtml(){
+    const ids = currentTagIds();
+    const attached = ids.map(getTag).filter(Boolean);
+    const pills = attached.map(t => `
+      <span class="tag-pill" style="background:${rgba(t.color,0.16)}; color:${t.color}; border-color:${rgba(t.color,0.4)}; position:relative;">
+        <button type="button" class="tag-pill-name" data-action="edit-tag" data-tagid="${t.id}">${escapeHtml(t.name)}</button>
+        <button type="button" class="tag-pill-x" data-action="remove-tag" data-tagid="${t.id}" title="Remove tag">✕</button>
+        ${state.tagEditingId === t.id ? tagEditPopoverHtml(t) : ''}
+      </span>`).join('');
+    const adder = attached.length < 4
+      ? `<span style="position:relative; display:inline-flex;">
+           <button type="button" class="tag-pill tag-pill-add" id="tagAddBtn">+ Add tag</button>
+           ${state.tagAdderOpen ? tagAdderPopoverHtml() : ''}
+         </span>`
+      : '';
+    return `<div class="tag-row">${pills}${adder}</div>`;
+  }
+  function tagAdderPopoverHtml(){
+    const q = state.tagQuery.trim().toLowerCase();
+    const currentIds = currentTagIds();
+    const matches = tags.filter(t => !currentIds.includes(t.id) && t.name.toLowerCase().includes(q));
+    const exact = tags.some(t => t.name.toLowerCase() === q);
+    return `
+      <div class="tag-popover" id="tagPopover">
+        <input type="text" id="tagSearchInput" placeholder="Search or create a tag…" value="${escapeHtml(state.tagQuery)}" autocomplete="off">
+        <div class="tag-options">
+          ${matches.map(t => `<button type="button" class="tag-option" data-action="attach-tag" data-tagid="${t.id}"><span class="va-dot" style="background:${t.color}"></span>${escapeHtml(t.name)}</button>`).join('')}
+          ${(!exact && q) ? `<button type="button" class="tag-option tag-option-create" data-action="create-tag">Create "${escapeHtml(state.tagQuery.trim())}"</button>` : ''}
+          ${(!matches.length && !q) ? `<div class="tag-empty">Type to search or create a tag</div>` : ''}
+        </div>
+      </div>`;
+  }
+  function tagEditPopoverHtml(t){
+    if(!t) return '';
+    return `
+      <div class="tag-popover" id="tagEditPopover">
+        <input type="text" id="tagRenameInput" data-tagid="${t.id}" value="${escapeHtml(t.name)}" autocomplete="off">
+        <div class="swatch-picker">${PALETTE.map(hex => `<button type="button" data-action="pick-tag-color" data-tagid="${t.id}" data-color="${hex}" style="background:${hex}" class="${t.color===hex?'selected':''}"></button>`).join('')}</div>
+      </div>`;
+  }
+  function cardA(p){
+    const c = getCollection(p.collectionId);
+    const chip = c ? `<span class="va-coll-chip" style="color:${c.color}"><span class="va-dot" style="background:${c.color}"></span>${escapeHtml(c.name)}</span>` : `<span class="va-coll-chip" style="color:var(--text-faint)">To sort</span>`;
+    const titleHtml = p.title ? `<div class="post-title">${escapeHtml(p.title)}</div>` : `<div class="post-title note-placeholder">Untitled</div>`;
+    const descHtml = p.description ? `<div class="post-desc">${escapeHtml(p.description)}</div>` : `<div class="post-desc note-placeholder">No description yet.</div>`;
+    const topBorder = c ? `border-top:4px solid ${c.color};` : '';
+    const selected = state.detailMode === p.id ? 'selected' : '';
+    return `
+      <div class="va-card ${!p.collectionId?'unsorted':''} ${selected}" draggable="true" data-id="${p.id}" style="${topBorder}">
+        <div class="va-card-top">
+          ${chip}
+          <button class="icon-btn" data-action="delete" data-id="${p.id}" title="Delete">✕</button>
+        </div>
+        <div class="post-textblock">${titleHtml}${descHtml}</div>
+        <div class="va-card-bottom">
+          <a href="${escapeHtml(p.link)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Open ↗</a>
+          <span>${formatDate(p.createdAt)}</span>
+        </div>
+      </div>`;
+  }
+  function renderDetailPanel(){
+    const isNew = state.detailMode === 'new';
+    const p = isNew ? null : posts.find(x => x.id === state.detailMode);
+    if(!isNew && !p) return '';
+    const collOptions = `<option value="">No collection (To sort)</option>` + collections.map(c => {
+      const preselect = isNew
+        ? (state.view.startsWith('collection:') && state.view.slice(11) === c.id)
+        : p.collectionId === c.id;
+      return `<option value="${c.id}" ${preselect?'selected':''}>${escapeHtml(c.name)}</option>`;
+    }).join('');
+    const linkVal = p ? p.link : '';
+    const titleVal = p ? p.title : '';
+    const descVal = p ? p.description : '';
+    const noteVal = p ? p.note : '';
+    const parsed = linkVal ? parseInstagramLink(linkVal) : null;
+    const media = parsed
+      ? `<div class="va-detail-media">
+           <iframe src="https://www.instagram.com/${parsed.type === 'tv' ? 'tv' : parsed.type}/${parsed.code}/embed" loading="lazy" allowfullscreen scrolling="no"></iframe>
+           <a class="btn-text" href="${escapeHtml(linkVal)}" target="_blank" rel="noopener">Open on Instagram ↗</a>
+         </div>`
+      : '';
+    const actions = isNew
+      ? `<div class="modal-actions">
+           <button type="button" class="btn-ghost" id="detailCancelNew">Cancel</button>
+           <button type="button" class="btn-primary" id="detailSubmitNew">Add Post</button>
+         </div>`
+      : `<div class="modal-actions" style="justify-content:space-between;">
+           <button type="button" class="btn-ghost" id="detailDelete" style="color:var(--danger); border-color:var(--danger);">Delete</button>
+           <button type="button" class="btn-primary" id="detailDone">Done</button>
+         </div>`;
+    const linkRow = isNew
+      ? `<div class="field">
+           <label for="d-link">Link</label>
+           <input type="url" id="d-link" value="${escapeHtml(linkVal)}" placeholder="https://instagram.com/p/…">
+         </div>`
+      : '';
+    const titleCollectionRow = `
+      <div class="va-detail-row">
+        <div class="field field-title">
+          <label for="d-title">Title</label>
+          <input type="text" id="d-title" value="${escapeHtml(titleVal)}" placeholder="First sentence of the description, or your own title">
+        </div>
+        <div class="field field-collection">
+          <label for="d-collection">Collection</label>
+          <select id="d-collection">${collOptions}</select>
+        </div>
+      </div>`;
+    return `
+      <div class="va-detail" id="detailPanel">
+        <div class="va-detail-scroll">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+            <h2>${isNew ? 'Add a Post' : 'Edit Post'}</h2>
+            <button class="icon-btn" id="detailClose" title="Close">✕</button>
+          </div>
+          <div class="va-detail-body">
+            ${media}
+            <div class="va-detail-fields">
+              ${linkRow}
+              ${tagRowHtml()}
+              ${titleCollectionRow}
+              <div class="va-detail-textareas">
+                <div class="field field-note">
+                  <label for="d-description">Description — the post's caption on Instagram</label>
+                  <textarea id="d-description" class="note-input" placeholder="Paste or edit the caption/legend for this post">${escapeHtml(descVal)}</textarea>
+                </div>
+                <div class="field field-note">
+                  <label for="d-post-note">Post Note — your own private note</label>
+                  <textarea id="d-post-note" class="note-input" placeholder="Why did you save this? (optional)">${escapeHtml(noteVal)}</textarea>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        ${actions}
+      </div>`;
+  }
+
+  // ================= Variant B — Gallery (dark) =================
+  function renderB(){
+    const unsortedCount = posts.filter(p => !p.collectionId).length;
+    const header = `
+      <div class="vb-header">
+        <div class="vb-brand">Socials Organizer</div>
+        <div class="spacer"></div>
+        <input type="text" class="search" id="searchInput" placeholder="Search notes, links…" value="${escapeHtml(state.search)}">
+        ${sortSelectHtml()}
+        <button class="btn-primary" id="addPostBtn">+ Add a link</button>
+        <details class="menu" id="moreMenu">
+          <summary class="btn-ghost">⋯</summary>
+          <div class="menu-panel">
+            <button type="button" id="newCollBtn2">+ New collection</button>
+            <button type="button" id="bulkBtn2">Add several links</button>
+            <button type="button" data-stub="1">Import export file…</button>
+            <button type="button" data-stub="1">Download backup (JSON)</button>
+            <button type="button" data-stub="1">Restore from backup…</button>
+          </div>
+        </details>
+      </div>`;
+
+    const pills = `
+      <div class="vb-pillrow">
+        <button class="vb-pill ${state.view==='all'?'active':''}" data-view="all">All (${posts.length})</button>
+        <button class="vb-pill ${state.view==='unsorted'?'active':''}" data-view="unsorted">To sort (${unsortedCount})</button>
+        ${collections.map(c => {
+          const n = posts.filter(p => p.collectionId===c.id).length;
+          return `<button class="vb-pill ${state.view==='collection:'+c.id?'active':''}" data-view="collection:${c.id}"><span class="va-dot" style="background:${c.color}"></span>${escapeHtml(c.name)} (${n})</button>`;
+        }).join('')}
+      </div>`;
+
+    let headerBlock = '';
+    if(state.view.startsWith('collection:')){
+      const c = getCollection(state.view.slice(11));
+      if(c){
+        headerBlock = `
+          <div class="vb-banner" style="background:linear-gradient(135deg, ${c.color} 0%, #14171C 130%)">
+            <h1>${escapeHtml(c.name)}</h1>
+            ${c.note ? `<div class="note">${escapeHtml(c.note)}</div>` : `<div class="note" style="color:rgba(255,255,255,.75); font-style:italic;">No Collection Note yet.</div>`}
+            <div class="row">
+              <button class="btn-ghost" data-action="edit-collection" data-id="${c.id}">Edit collection</button>
+            </div>
+          </div>`;
+      }
+    } else {
+      headerBlock = `<div class="vb-heading"><h1>${viewTitle()}</h1><span class="count">${postsForView().length} posts</span></div>`;
+    }
+
+    const list = visiblePosts();
+    const grid = list.length
+      ? `<div class="vb-grid">${list.map(cardB).join('')}</div>`
+      : emptyBlock();
+
+    return `<div class="vb-shell">${header}${pills}${headerBlock}${grid}</div>`;
+  }
+  function cardB(p){
+    const c = getCollection(p.collectionId);
+    const bg = c ? c.color : '#3A414D';
+    const label = c ? escapeHtml(c.name) : 'To sort';
+    const icon = isVideoLink(p.link)
+      ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="11" fill="rgba(255,255,255,0.18)"/><path d="M9.5 7.5v9l8-4.5-8-4.5z" fill="#fff"/></svg>'
+      : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2" stroke="#fff" stroke-width="1.6"/><circle cx="8.5" cy="10" r="1.6" fill="#fff"/><path d="M4 16l5-4 3 2.5 4-3.5 4 4" stroke="#fff" stroke-width="1.6" fill="none" stroke-linejoin="round"/></svg>';
+    const titleHtml = p.title ? `<div class="post-title">${escapeHtml(p.title)}</div>` : `<div class="post-title note-placeholder">Untitled</div>`;
+    const descHtml = p.description ? `<div class="post-desc">${escapeHtml(p.description)}</div>` : `<div class="post-desc note-placeholder">No description yet.</div>`;
+    return `
+      <div class="vb-card" data-id="${p.id}">
+        <div class="vb-media" style="background:${bg}">${icon}<span class="label">${label}</span></div>
+        <div class="vb-card-body">
+          <div class="post-textblock">${titleHtml}${descHtml}</div>
+          <div class="vb-card-bottom">
+            <a href="${escapeHtml(p.link)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Open ↗</a>
+            <button class="icon-btn" data-action="delete" data-id="${p.id}" title="Delete">✕</button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  // ================= Variant C — List =================
+  function renderC(){
+    const unsortedCount = posts.filter(p => !p.collectionId).length;
+    const topbar = `
+      <div class="vc-topbar">
+        <span class="vc-brand">Socials Organizer /</span>
+        <select class="vc-view-select" id="viewSelect">
+          <option value="all" ${state.view==='all'?'selected':''}>All posts (${posts.length})</option>
+          <option value="unsorted" ${state.view==='unsorted'?'selected':''}>To sort (${unsortedCount})</option>
+          ${collections.map(c => {
+            const n = posts.filter(p => p.collectionId===c.id).length;
+            return `<option value="collection:${c.id}" ${state.view==='collection:'+c.id?'selected':''}>${escapeHtml(c.name)} (${n})</option>`;
+          }).join('')}
+        </select>
+        <div class="spacer"></div>
+        <input type="text" class="search" id="searchInput" placeholder="Search…" value="${escapeHtml(state.search)}">
+        ${sortSelectHtml()}
+        <button class="btn-primary" id="addPostBtn">+ Add</button>
+        <details class="menu" id="moreMenuC">
+          <summary class="btn-ghost">⋯</summary>
+          <div class="menu-panel">
+            <button type="button" id="newCollBtn3">+ New collection</button>
+            <button type="button" id="bulkBtn3">Add several links</button>
+            <button type="button" data-stub="1">Import export file…</button>
+            <button type="button" data-stub="1">Download backup (JSON)</button>
+            <button type="button" data-stub="1">Restore from backup…</button>
+          </div>
+        </details>
+      </div>`;
+
+    let noteCard = '';
+    if(state.view.startsWith('collection:')){
+      const c = getCollection(state.view.slice(11));
+      if(c){
+        noteCard = `
+          <div class="vc-notecard">
+            <span class="swatch" style="background:${c.color}"></span>
+            <div>
+              ${c.note ? `<div class="note">${escapeHtml(c.note)}</div>` : `<div class="note note-placeholder">No Collection Note yet.</div>`}
+              <div class="row"><button class="btn-text" data-action="edit-collection" data-id="${c.id}">Edit collection</button></div>
+            </div>
+          </div>`;
+      }
+    }
+
+    const list = visiblePosts();
+    let body;
+    if(list.length){
+      body = `
+        <div class="vc-list-head"><span style="flex:1">Note</span><span class="coll">Collection</span><span class="date">Saved</span><span style="width:46px"></span></div>
+        <div class="vc-list">${list.map(rowC).join('')}</div>`;
+    } else {
+      body = emptyBlock();
+    }
+
+    return `<div class="vc-shell">${topbar}${noteCard || `<div style="height:6px"></div>`}${body}</div>`;
+  }
+  function rowC(p){
+    const c = getCollection(p.collectionId);
+    const title = p.title ? escapeHtml(p.title) : '<span class="note-placeholder">Untitled</span>';
+    return `
+      <div class="vc-row" data-id="${p.id}">
+        <span class="va-dot" style="background:${c ? c.color : 'var(--text-faint)'}"></span>
+        <span class="note" title="${escapeHtml(p.description)}">${title}</span>
+        <span class="coll">${c ? escapeHtml(c.name) : 'To sort'}</span>
+        <span class="date">${formatDate(p.createdAt)}</span>
+        <span class="actions">
+          <a class="icon-btn" href="${escapeHtml(p.link)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open">↗</a>
+          <button class="icon-btn" data-action="delete" data-id="${p.id}" title="Delete">✕</button>
+        </span>
+      </div>`;
+  }
+
+  function emptyBlock(){
+    return `<div class="empty"><h2>Nothing here</h2><p>Try a different search, or add a link to get started.</p></div>`;
+  }
+
+  // ---------------- render dispatch + handlers ----------------
+  function render(){
+    document.body.setAttribute('data-variant', state.variant);
+    const app = $('#app');
+    if(state.variant === 'a') app.innerHTML = renderA();
+    else if(state.variant === 'b') app.innerHTML = renderB();
+    else app.innerHTML = renderC();
+    attachHandlers();
+    renderSwitcher();
+    syncDetailPanelStickyOffset();
+  }
+  function syncDetailPanelStickyOffset(){
+    const topBlock = document.querySelector('.va-sticky-top.is-sticky');
+    const detail = document.querySelector('.va-detail');
+    if(!topBlock || !detail) return;
+    const top = topBlock.offsetHeight + 18;
+    detail.style.top = top + 'px';
+    detail.style.maxHeight = `calc(100vh - ${top + 20}px)`;
+  }
+
+  function attachHandlers(){
+    const app = $('#app');
+
+    app.querySelectorAll('[data-view]').forEach(el => {
+      el.addEventListener('click', () => { state.view = el.dataset.view; render(); });
+    });
+    const viewSelect = $('#viewSelect');
+    if(viewSelect) viewSelect.addEventListener('change', (e) => { state.view = e.target.value; render(); });
+
+    const searchInput = $('#searchInput');
+    if(searchInput) searchInput.addEventListener('input', (e) => {
+      state.search = e.target.value;
+      // simplest correct behaviour for a prototype: full re-render, but keep focus
+      const caret = e.target.selectionStart;
+      render();
+      const again = $('#searchInput');
+      if(again){ again.focus(); again.setSelectionRange(caret, caret); }
+    });
+    const sortSelect = $('#sortSelect');
+    if(sortSelect) sortSelect.addEventListener('change', (e) => { state.sort = e.target.value; render(); });
+
+    app.querySelectorAll('[data-id]').forEach(el => {
+      if(el.classList.contains('va-card') || el.classList.contains('vb-card') || el.classList.contains('vc-row')){
+        el.addEventListener('click', (e) => {
+          if(e.target.closest('[data-action="delete"]') || e.target.closest('a')) return;
+          openPost(el.dataset.id);
+        });
+      }
+    });
+    app.querySelectorAll('[data-action="delete"]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        confirmAction('Delete this post?', 'This removes it for good.', () => {
+          posts = posts.filter(p => p.id !== btn.dataset.id);
+          if(state.detailMode === btn.dataset.id) closeDetailPanel();
+          render();
+        });
+      });
+    });
+    app.querySelectorAll('[data-action="edit-collection"]').forEach(btn => {
+      btn.addEventListener('click', (e) => { e.stopPropagation(); openCollectionModal(btn.dataset.id); });
+    });
+
+    const addPostBtn = $('#addPostBtn'); if(addPostBtn) addPostBtn.addEventListener('click', () => openPostNew());
+    const newCollBtn = $('#newCollBtn') || $('#newCollBtn2') || $('#newCollBtn3');
+    if(newCollBtn) newCollBtn.addEventListener('click', () => { closeAllMenus(); openCollectionModal(); });
+    ['#bulkBtn','#bulkBtn2','#bulkBtn3'].forEach(sel => { const b = $(sel); if(b) b.addEventListener('click', () => { closeAllMenus(); stubToast(); }); });
+    app.querySelectorAll('[data-stub]').forEach(btn => btn.addEventListener('click', () => { closeAllMenus(); stubToast(); }));
+
+    if(state.variant === 'a') attachHandlersA();
+  }
+  function closeAllMenus(){ app_querySelectorAllDetails(); }
+  function app_querySelectorAllDetails(){ document.querySelectorAll('details.menu[open]').forEach(d => d.removeAttribute('open')); }
+
+  // ---------------- variant A: inline collection editing, color popover, detail panel, drag & drop ----------------
+  function attachHandlersA(){
+    const app = $('#app');
+
+    const nameInput = $('#coll-name-input');
+    if(nameInput) nameInput.addEventListener('input', (e) => {
+      const c = getCollection(nameInput.dataset.id);
+      if(!c) return;
+      c.name = e.target.value;
+      const navName = document.querySelector(`.va-nav-item[data-view="collection:${c.id}"] .nav-name`);
+      if(navName) navName.textContent = c.name || '(untitled)';
+    });
+    const noteInput = $('#coll-note-input');
+    if(noteInput) noteInput.addEventListener('input', (e) => {
+      const c = getCollection(noteInput.dataset.id);
+      if(c) c.note = e.target.value;
+    });
+
+    app.querySelectorAll('[data-action="color-swatch"]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        state.colorPopoverFor = state.colorPopoverFor === btn.dataset.id ? null : btn.dataset.id;
+        render();
+        if(state.colorPopoverFor){
+          setTimeout(() => document.addEventListener('click', handleOutsideColorPopoverClick, {once:true}), 0);
+        }
+      });
+    });
+    app.querySelectorAll('[data-action="pick-color"]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const c = getCollection(btn.dataset.id);
+        if(c) c.color = btn.dataset.color;
+        state.colorPopoverFor = null;
+        render();
+      });
+    });
+
+    app.querySelectorAll('.va-card').forEach(card => {
+      card.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('text/plain', card.dataset.id);
+        e.dataTransfer.effectAllowed = 'move';
+        card.classList.add('dragging');
+      });
+      card.addEventListener('dragend', () => card.classList.remove('dragging'));
+    });
+    app.querySelectorAll('.va-nav-item[data-view]').forEach(item => {
+      const view = item.dataset.view;
+      if(view === 'all') return;
+      item.addEventListener('dragover', (e) => { e.preventDefault(); item.classList.add('drop-target'); });
+      item.addEventListener('dragleave', () => item.classList.remove('drop-target'));
+      item.addEventListener('drop', (e) => {
+        e.preventDefault();
+        item.classList.remove('drop-target');
+        const postId = e.dataTransfer.getData('text/plain');
+        const p = posts.find(x => x.id === postId);
+        if(!p) return;
+        const newCollectionId = view === 'unsorted' ? null : view.slice(11);
+        if(p.collectionId === newCollectionId) return;
+        p.collectionId = newCollectionId;
+        const collName = newCollectionId ? getCollection(newCollectionId).name : 'To sort';
+        render();
+        showToast(`Moved to ${collName}`);
+      });
+    });
+
+    const groupByTagBtn = $('#groupByTagBtn');
+    if(groupByTagBtn) groupByTagBtn.addEventListener('click', () => { state.groupByTag = !state.groupByTag; render(); });
+
+    const detailClose = $('#detailClose'); if(detailClose) detailClose.addEventListener('click', () => { closeDetailPanel(); render(); });
+    const detailDone = $('#detailDone'); if(detailDone) detailDone.addEventListener('click', () => { closeDetailPanel(); render(); });
+    const detailCancelNew = $('#detailCancelNew'); if(detailCancelNew) detailCancelNew.addEventListener('click', () => { closeDetailPanel(); render(); });
+    const detailDelete = $('#detailDelete'); if(detailDelete) detailDelete.addEventListener('click', () => {
+      const id = state.detailMode;
+      confirmAction('Delete this post?', 'This removes it for good.', () => {
+        posts = posts.filter(p => p.id !== id);
+        closeDetailPanel();
+        render();
+      });
+    });
+    const detailSubmitNew = $('#detailSubmitNew'); if(detailSubmitNew) detailSubmitNew.addEventListener('click', () => {
+      const link = $('#d-link').value.trim();
+      if(!link){ showToast('Add a link first'); return; }
+      const data = {
+        link,
+        title: $('#d-title').value.trim(),
+        description: $('#d-description').value.trim(),
+        titleManual: newPostTitleManual,
+        note: $('#d-post-note').value.trim(),
+        tagIds: newPostTagIds.slice(),
+        collectionId: $('#d-collection').value || null,
+      };
+      posts.push({id: uid('p'), createdAt: Date.now(), ...data});
+      closeDetailPanel();
+      render();
+      showToast('Post added');
+    });
+
+    const tagAddBtn = $('#tagAddBtn');
+    if(tagAddBtn) tagAddBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      state.tagEditingId = null;
+      state.tagAdderOpen = !state.tagAdderOpen;
+      state.tagQuery = '';
+      render();
+      if(state.tagAdderOpen){
+        setTimeout(() => { const el = $('#tagSearchInput'); if(el) el.focus(); }, 30);
+        setTimeout(() => document.addEventListener('click', handleOutsideTagPopoverClick, {once:true}), 0);
+      }
+    });
+    const tagSearchInput = $('#tagSearchInput');
+    if(tagSearchInput) tagSearchInput.addEventListener('input', (e) => {
+      state.tagQuery = e.target.value;
+      const caret = e.target.selectionStart;
+      render();
+      const again = $('#tagSearchInput');
+      if(again){ again.focus(); again.setSelectionRange(caret, caret); }
+      setTimeout(() => document.addEventListener('click', handleOutsideTagPopoverClick, {once:true}), 0);
+    });
+    app.querySelectorAll('[data-action="attach-tag"]').forEach(btn => {
+      btn.addEventListener('click', (e) => { e.stopPropagation(); addTagToCurrent(btn.dataset.tagid); });
+    });
+    const createTagBtn = $('[data-action="create-tag"]');
+    if(createTagBtn) createTagBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const name = state.tagQuery.trim();
+      if(!name) return;
+      const t = {id: uid('t'), name, color: PALETTE[tags.length % PALETTE.length]};
+      tags.push(t);
+      addTagToCurrent(t.id);
+    });
+    app.querySelectorAll('[data-action="remove-tag"]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const tagId = btn.dataset.tagid;
+        if(state.detailMode === 'new'){
+          newPostTagIds = newPostTagIds.filter(id => id !== tagId);
+        } else {
+          const p = posts.find(x => x.id === state.detailMode);
+          if(p) p.tagIds = (p.tagIds || []).filter(id => id !== tagId);
+        }
+        render();
+      });
+    });
+    app.querySelectorAll('[data-action="edit-tag"]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        state.tagAdderOpen = false;
+        state.tagEditingId = state.tagEditingId === btn.dataset.tagid ? null : btn.dataset.tagid;
+        render();
+        if(state.tagEditingId){
+          setTimeout(() => { const el = $('#tagRenameInput'); if(el){ el.focus(); el.select(); } }, 30);
+          setTimeout(() => document.addEventListener('click', handleOutsideTagPopoverClick, {once:true}), 0);
+        }
+      });
+    });
+    const tagRenameInput = $('#tagRenameInput');
+    if(tagRenameInput) tagRenameInput.addEventListener('input', (e) => {
+      const t = getTag(tagRenameInput.dataset.tagid);
+      if(t){
+        t.name = e.target.value;
+        document.querySelectorAll(`[data-action="edit-tag"][data-tagid="${t.id}"]`).forEach(el => { el.textContent = t.name || '(untitled)'; });
+      }
+    });
+    app.querySelectorAll('[data-action="pick-tag-color"]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const t = getTag(btn.dataset.tagid);
+        if(t) t.color = btn.dataset.color;
+        render();
+      });
+    });
+    if(state.detailMode && state.detailMode !== 'new'){
+      const dCollection = $('#d-collection');
+      if(dCollection) dCollection.addEventListener('change', (e) => {
+        const p = posts.find(x => x.id === state.detailMode);
+        if(p){ p.collectionId = e.target.value || null; render(); }
+      });
+      const dPostNote = $('#d-post-note');
+      if(dPostNote) dPostNote.addEventListener('input', (e) => {
+        const p = posts.find(x => x.id === state.detailMode);
+        if(p) p.note = e.target.value;
+      });
+    }
+    const dTitle = $('#d-title');
+    const dDescription = $('#d-description');
+    if(dDescription) dDescription.addEventListener('input', (e) => {
+      if(state.detailMode === 'new'){
+        if(!newPostTitleManual && dTitle) dTitle.value = firstSentence(e.target.value);
+        return;
+      }
+      const p = posts.find(x => x.id === state.detailMode);
+      if(!p) return;
+      p.description = e.target.value;
+      if(!p.titleManual){
+        p.title = firstSentence(p.description);
+        if(dTitle) dTitle.value = p.title;
+        patchCardTitle(p);
+      }
+      patchCardDesc(p);
+    });
+    if(dTitle) dTitle.addEventListener('input', () => {
+      if(state.detailMode === 'new'){ newPostTitleManual = true; return; }
+      const p = posts.find(x => x.id === state.detailMode);
+      if(!p) return;
+      p.title = dTitle.value;
+      p.titleManual = true;
+      patchCardTitle(p);
+    });
+  }
+  function patchCardTitle(p){
+    const el = document.querySelector(`.va-card[data-id="${p.id}"] .post-title`);
+    if(el){ el.textContent = p.title || 'Untitled'; el.classList.toggle('note-placeholder', !p.title); }
+  }
+  function patchCardDesc(p){
+    const el = document.querySelector(`.va-card[data-id="${p.id}"] .post-desc`);
+    if(el){ el.textContent = p.description || 'No description yet.'; el.classList.toggle('note-placeholder', !p.description); }
+  }
+  function handleOutsideColorPopoverClick(e){
+    const pop = document.getElementById('colorPopover');
+    if(pop && !pop.contains(e.target)){
+      state.colorPopoverFor = null;
+      render();
+    }
+  }
+  function handleOutsideTagPopoverClick(e){
+    const pop = document.getElementById('tagPopover') || document.getElementById('tagEditPopover');
+    if(pop && !pop.contains(e.target) && !e.target.closest('#tagAddBtn') && !e.target.closest('[data-action="edit-tag"]')){
+      state.tagAdderOpen = false;
+      state.tagEditingId = null;
+      render();
+    }
+  }
+  function addTagToCurrent(tagId){
+    const ids = currentTagIds();
+    if(ids.includes(tagId) || ids.length >= 4){ state.tagAdderOpen = false; state.tagQuery = ''; render(); return; }
+    if(state.detailMode === 'new'){
+      newPostTagIds.push(tagId);
+    } else {
+      const p = posts.find(x => x.id === state.detailMode);
+      if(p){ if(!p.tagIds) p.tagIds = []; p.tagIds.push(tagId); }
+    }
+    state.tagAdderOpen = false;
+    state.tagQuery = '';
+    render();
+  }
+  function resetDetailPopovers(){
+    state.tagAdderOpen = false;
+    state.tagEditingId = null;
+    state.tagQuery = '';
+  }
+  function closeDetailPanel(){
+    state.detailMode = null;
+    resetDetailPopovers();
+  }
+  function openPost(id){
+    if(state.variant === 'a'){ resetDetailPopovers(); state.detailMode = id; render(); }
+    else openPostModal(id);
+  }
+  function openPostNew(){
+    if(state.variant === 'a'){ newPostTitleManual = false; newPostTagIds = []; resetDetailPopovers(); state.detailMode = 'new'; render(); }
+    else openPostModal();
+  }
+
+  // ---------------- post modal ----------------
+  function openPostModal(id){
+    state.editingPostId = id || null;
+    const p = id ? posts.find(x => x.id === id) : null;
+    $('#postModalTitle').textContent = p ? 'Edit Post' : 'Add a Post';
+    $('#f-link').value = p ? p.link : '';
+    $('#f-title').value = p ? p.title : '';
+    $('#f-description').value = p ? p.description : '';
+    $('#f-post-note').value = p ? p.note : '';
+    modalTitleManual = p ? !!p.titleManual : false;
+    const sel = $('#f-collection');
+    sel.innerHTML = `<option value="">No collection (To sort)</option>` +
+      collections.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+    sel.value = p ? (p.collectionId || '') : (state.view.startsWith('collection:') ? state.view.slice(11) : '');
+
+    const embedWrap = $('#embedWrap');
+    const embedInner = $('#embedInner');
+    const parsed = p && p.link ? parseInstagramLink(p.link) : null;
+    if(parsed){
+      embedWrap.classList.remove('hidden');
+      embedInner.innerHTML = `<iframe src="https://www.instagram.com/${parsed.type === 'tv' ? 'tv' : parsed.type}/${parsed.code}/embed" loading="lazy" allowfullscreen scrolling="no"></iframe>`;
+    } else {
+      embedWrap.classList.add('hidden');
+      embedInner.innerHTML = '';
+    }
+    $('#postOverlay').classList.remove('hidden');
+    setTimeout(() => $('#f-link').focus(), 30);
+  }
+  function closePostModal(){ $('#postOverlay').classList.add('hidden'); $('#embedInner').innerHTML=''; state.editingPostId = null; }
+  $('#postCancel').addEventListener('click', closePostModal);
+  $('#postOverlay').addEventListener('click', (e) => { if(e.target.id==='postOverlay') closePostModal(); });
+  $('#f-description').addEventListener('input', (e) => {
+    if(!modalTitleManual) $('#f-title').value = firstSentence(e.target.value);
+  });
+  $('#f-title').addEventListener('input', () => { modalTitleManual = true; });
+  $('#postForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const link = $('#f-link').value.trim();
+    if(!link) return;
+    const data = {
+      link,
+      title: $('#f-title').value.trim(),
+      description: $('#f-description').value.trim(),
+      titleManual: modalTitleManual,
+      note: $('#f-post-note').value.trim(),
+      collectionId: $('#f-collection').value || null,
+    };
+    if(state.editingPostId){
+      const idx = posts.findIndex(p => p.id === state.editingPostId);
+      if(idx > -1) posts[idx] = {...posts[idx], ...data};
+    } else {
+      posts.push({id: uid('p'), createdAt: Date.now(), ...data});
+    }
+    closePostModal();
+    render();
+  });
+
+  // ---------------- collection modal ----------------
+  function renderColorPicker(){
+    $('#colorPicker').innerHTML = PALETTE.map(hex => `<button type="button" data-color="${hex}" style="background:${hex}" class="${state.editingCollectionColor===hex?'selected':''}"></button>`).join('');
+    $('#colorPicker').querySelectorAll('button').forEach(b => {
+      b.addEventListener('click', () => { state.editingCollectionColor = b.dataset.color; renderColorPicker(); });
+    });
+  }
+  function openCollectionModal(id){
+    state.editingCollectionId = id || null;
+    const c = id ? getCollection(id) : null;
+    $('#collModalTitle').textContent = c ? 'Edit Collection' : 'New Collection';
+    $('#c-name').value = c ? c.name : '';
+    $('#c-note').value = c ? c.note : '';
+    state.editingCollectionColor = c ? c.color : PALETTE[collections.length % PALETTE.length];
+    renderColorPicker();
+    $('#collectionOverlay').classList.remove('hidden');
+    setTimeout(() => $('#c-name').focus(), 30);
+  }
+  function closeCollectionModal(){ $('#collectionOverlay').classList.add('hidden'); state.editingCollectionId = null; }
+  $('#collCancel').addEventListener('click', closeCollectionModal);
+  $('#collectionOverlay').addEventListener('click', (e) => { if(e.target.id==='collectionOverlay') closeCollectionModal(); });
+  $('#collectionForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = $('#c-name').value.trim();
+    if(!name) return;
+    const data = { name, note: $('#c-note').value.trim(), color: state.editingCollectionColor };
+    if(state.editingCollectionId){
+      const idx = collections.findIndex(c => c.id === state.editingCollectionId);
+      if(idx > -1) collections[idx] = {...collections[idx], ...data};
+    } else {
+      const c = {id: uid('c'), ...data};
+      collections.push(c);
+      state.view = 'collection:' + c.id;
+    }
+    closeCollectionModal();
+    render();
+  });
+
+  // ---------------- confirm modal ----------------
+  function confirmAction(title, body, onConfirm){
+    $('#confirmTitle').textContent = title;
+    $('#confirmBody').textContent = body;
+    state.pendingConfirm = onConfirm;
+    $('#confirmOverlay').classList.remove('hidden');
+  }
+  $('#confirmCancel').addEventListener('click', () => { $('#confirmOverlay').classList.add('hidden'); state.pendingConfirm = null; });
+  $('#confirmOk').addEventListener('click', () => {
+    if(state.pendingConfirm) state.pendingConfirm();
+    $('#confirmOverlay').classList.add('hidden');
+    state.pendingConfirm = null;
+  });
+  $('#confirmOverlay').addEventListener('click', (e) => { if(e.target.id==='confirmOverlay'){ $('#confirmOverlay').classList.add('hidden'); state.pendingConfirm=null; } });
+
+  document.addEventListener('keydown', (e) => {
+    if(e.key === 'Escape'){
+      closePostModal(); closeCollectionModal(); $('#confirmOverlay').classList.add('hidden'); closeAllMenus();
+      if(state.detailMode !== null || state.colorPopoverFor !== null){
+        closeDetailPanel(); state.colorPopoverFor = null; render();
+      }
+    }
+  });
+
+  // ---------------- prototype switcher ----------------
+  function currentVariantIndex(){ return VARIANTS.findIndex(v => v.key === state.variant); }
+  function setVariant(key){
+    state.variant = key;
+    state.view = 'all';
+    state.detailMode = null;
+    state.colorPopoverFor = null;
+    state.groupByTag = false;
+    resetDetailPopovers();
+    const url = new URL(window.location.href);
+    url.searchParams.set('variant', key);
+    window.history.replaceState({}, '', url);
+    render();
+  }
+  function renderSwitcher(){
+    const v = VARIANTS[currentVariantIndex()];
+    $('#switchLabel').innerHTML = `${v.key.toUpperCase()} — <b>${v.name}</b>`;
+  }
+  $('#switchPrev').addEventListener('click', () => {
+    const i = currentVariantIndex();
+    setVariant(VARIANTS[(i - 1 + VARIANTS.length) % VARIANTS.length].key);
+  });
+  $('#switchNext').addEventListener('click', () => {
+    const i = currentVariantIndex();
+    setVariant(VARIANTS[(i + 1) % VARIANTS.length].key);
+  });
+  document.addEventListener('keydown', (e) => {
+    const tag = (document.activeElement && document.activeElement.tagName) || '';
+    if(tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return;
+    if(e.key === 'ArrowLeft') $('#switchPrev').click();
+    if(e.key === 'ArrowRight') $('#switchNext').click();
+  });
+
+  // ---------------- init ----------------
+  (function init(){
+    const params = new URLSearchParams(window.location.search);
+    const v = params.get('variant');
+    state.variant = VARIANTS.some(x => x.key === v) ? v : 'a';
+    render();
+  })();
+})();
+</script>
+</body>
+</html>
