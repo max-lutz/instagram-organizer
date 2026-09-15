@@ -1,0 +1,36 @@
+const { createApiHandler } = require('./router');
+const { createCollectionsApi } = require('./collections');
+const { createTagsApi } = require('./tags');
+const { createPostsApi } = require('./posts');
+
+function createApiHandlerForDb(db) {
+  const collections = createCollectionsApi(db);
+  const tags = createTagsApi(db);
+  const posts = createPostsApi(db);
+
+  const routes = [
+    { method: 'GET', path: '/api/collections', handler: collections.list },
+    { method: 'POST', path: '/api/collections', handler: collections.create },
+    { method: 'GET', path: '/api/collections/:id', handler: collections.get },
+    { method: 'PATCH', path: '/api/collections/:id', handler: collections.update },
+    { method: 'DELETE', path: '/api/collections/:id', handler: collections.remove },
+
+    { method: 'GET', path: '/api/tags', handler: tags.list },
+    { method: 'POST', path: '/api/tags', handler: tags.create },
+    { method: 'PATCH', path: '/api/tags/:id', handler: tags.update },
+    { method: 'DELETE', path: '/api/tags/:id', handler: tags.remove },
+
+    { method: 'GET', path: '/api/posts/stats', handler: posts.stats },
+    { method: 'GET', path: '/api/posts', handler: posts.list },
+    { method: 'POST', path: '/api/posts', handler: posts.create },
+    { method: 'GET', path: '/api/posts/:id', handler: posts.get },
+    { method: 'PATCH', path: '/api/posts/:id', handler: posts.update },
+    { method: 'DELETE', path: '/api/posts/:id', handler: posts.remove },
+    { method: 'POST', path: '/api/posts/:id/tags', handler: posts.attachTag },
+    { method: 'DELETE', path: '/api/posts/:id/tags/:tagId', handler: posts.detachTag },
+  ];
+
+  return createApiHandler(routes);
+}
+
+module.exports = { createApiHandlerForDb };
