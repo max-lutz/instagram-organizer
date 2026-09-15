@@ -2,6 +2,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const { openDb } = require('./db');
+const { createApiHandlerForDb } = require('./api/routes');
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -14,6 +15,7 @@ const CONTENT_TYPES = {
 };
 
 const db = openDb();
+const handleApiRequest = createApiHandlerForDb(db);
 
 function serveStatic(req, res) {
   const requestPath = decodeURIComponent(req.url.split('?')[0]);
@@ -39,6 +41,11 @@ function serveStatic(req, res) {
 }
 
 const server = http.createServer((req, res) => {
+  const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  if (url.pathname.startsWith('/api/')) {
+    handleApiRequest(req, res, url);
+    return;
+  }
   serveStatic(req, res);
 });
 

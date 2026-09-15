@@ -6,9 +6,9 @@ const DATA_DIR = path.join(__dirname, '..', 'data');
 const DB_PATH = path.join(DATA_DIR, 'socials-organizer.db');
 const SCHEMA_PATH = path.join(__dirname, 'schema.sql');
 
-function openDb() {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  const db = new DatabaseSync(DB_PATH);
+function openDb(dbPath = DB_PATH) {
+  if (dbPath === DB_PATH) fs.mkdirSync(DATA_DIR, { recursive: true });
+  const db = new DatabaseSync(dbPath);
   db.exec('PRAGMA foreign_keys = ON');
   db.exec(fs.readFileSync(SCHEMA_PATH, 'utf8'));
   return db;
