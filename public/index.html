@@ -7,6 +7,63 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <script src="app.js"></script>
+
+<div id="app"></div>
+
+<!-- New collection modal -->
+<div class="overlay hidden" id="collectionOverlay">
+  <div class="modal">
+    <h2 id="collModalTitle">New Collection</h2>
+    <form id="collectionForm">
+      <div class="field">
+        <label for="c-name">Name</label>
+        <input type="text" id="c-name" placeholder="e.g. Weeknight dinners" required>
+      </div>
+      <div class="field">
+        <label>Color</label>
+        <div class="swatch-picker" id="colorPicker"></div>
+      </div>
+      <div class="field">
+        <label for="c-note">Collection Note — what's this collection for?</label>
+        <textarea id="c-note" class="note-input" placeholder="e.g. Fast, low-effort recipes for busy weekdays"></textarea>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" id="collCancel">Cancel</button>
+        <button type="submit" class="btn-primary" id="collSubmit">Save Collection</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Generic confirm modal (post deletion) -->
+<div class="overlay hidden" id="confirmOverlay">
+  <div class="modal" style="max-width:380px;">
+    <h2 id="confirmTitle">Are you sure?</h2>
+    <p style="font-size:13px; color:var(--text-soft); margin-top:-8px;" id="confirmBody"></p>
+    <div class="modal-actions">
+      <button type="button" class="btn-ghost" id="confirmCancel">Cancel</button>
+      <button type="button" class="btn-danger" id="confirmOk">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- Collection deletion modal: keep-or-delete-posts choice, ADR 0001 -->
+<div class="overlay hidden" id="collDeleteOverlay">
+  <div class="modal" style="max-width:420px;">
+    <h2>Delete collection?</h2>
+    <p style="font-size:13px; color:var(--text-soft); margin-top:-8px;">
+      What should happen to the posts in <strong id="collDeleteName"></strong>?
+    </p>
+    <div class="modal-actions">
+      <button type="button" class="btn-ghost" id="collDeleteCancel">Cancel</button>
+      <button type="button" class="btn-ghost" id="collDeleteKeepPosts">Delete collection, keep posts</button>
+      <button type="button" class="btn-danger" id="collDeleteWithPosts">Delete collection and posts</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
 </body>
 </html>
