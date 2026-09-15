@@ -3,13 +3,10 @@
   PROTOTYPE — throwaway, not production code. Built for wayfinder ticket
   "Prototype: visual redesign and dedicated Collection view".
 
-  Three radically different UI variants, switchable via ?variant=a|b|c
-  (also the floating bottom bar / arrow keys):
-    A — Sidebar: persistent left nav (collections list), card grid content.
-    B — Gallery: dark top-nav with collection pills, banner-style Collection
-        view, denser gallery cards.
-    C — List: dropdown-based nav, dense single-line list rows instead of
-        a card grid, note-card header for Collection view.
+  Persistent left sidebar (All posts / To sort / Collections), card grid
+  content area. Converged on this "Sidebar" direction after comparing it
+  against two other visual directions (dark gallery, dense list) — those
+  have been dropped from this file now that the direction is settled.
 
   Data is in-memory mock data only — nothing persists, nothing is wired to
   real storage. Answers "what should the new visual language look like" and
@@ -98,8 +95,7 @@
   /* ---------- shared: note placeholder ---------- */
   .note-placeholder{color:var(--text-faint); font-style:italic;}
 
-  /* ================= Variant A — Sidebar ================= */
-  body[data-variant="a"]{background:var(--bg);}
+  /* ================= Sidebar layout ================= */
   .va-shell{display:flex; min-height:100vh;}
   .va-sidebar{
     width:236px; flex-shrink:0; background:var(--surface); border-right:1px solid var(--border);
@@ -122,8 +118,7 @@
   .va-nav-label{font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-faint); padding:0 9px; margin-top:4px;}
 
   .va-main{flex:1; min-width:0; padding:0 34px 60px;}
-  .va-sticky-top{padding-top:26px;}
-  .va-sticky-top.is-sticky{position:sticky; top:0; z-index:15; background:var(--bg);}
+  .va-sticky-top{padding-top:26px; position:sticky; top:0; z-index:15; background:var(--bg);}
   .va-topbar{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:22px;}
   .va-topbar .spacer{flex:1;}
   .va-heading{display:flex; align-items:baseline; gap:10px; margin-bottom:18px;}
@@ -131,10 +126,19 @@
   .va-heading .count{color:var(--text-faint); font-size:13px;}
 
   .va-collheader{
-    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    position:relative; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
     padding:16px 22px 20px; margin-bottom:22px; display:flex; gap:16px; align-items:flex-start;
   }
+  .va-collheader-collapse{position:absolute; top:10px; right:10px;}
   .va-collheader .row{display:flex; align-items:center; gap:10px; margin-top:10px;}
+  .va-collheader-compact{
+    display:flex; align-items:center; gap:9px; background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius); padding:10px 16px; margin-bottom:22px; font-size:13.5px; font-weight:600;
+    color:var(--text); width:100%; text-align:left;
+  }
+  .va-collheader-compact:hover{background:var(--surface-sunken);}
+  .va-collheader-compact .name{flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .va-collheader-compact .chevron{color:var(--text-faint); font-size:11px;}
   .swatch-wrap{position:relative; flex-shrink:0;}
   .swatch-btn{
     width:30px; height:30px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px var(--border);
@@ -168,10 +172,12 @@
     width:80%; display:flex; flex-direction:column; overflow:hidden;
   }
   .va-detail h2{font-size:17px; margin:0; font-weight:700;}
+  .va-detail-close{position:absolute; top:14px; right:14px; z-index:5;}
   .va-detail-scroll{overflow-y:auto; padding:20px 22px 0; flex:1; min-height:0;}
   .va-detail .modal-actions{flex-shrink:0; margin:0; padding:14px 22px 20px; border-top:1px solid var(--border-soft);}
-  .va-detail-body{display:flex; gap:20px; align-items:stretch; margin-bottom:16px;}
-  .va-detail-media{width:300px; flex-shrink:0; display:flex; flex-direction:column; gap:6px;}
+  .va-detail-body{display:flex; gap:20px; align-items:flex-start; margin-bottom:16px; padding-right:34px;}
+  .va-detail-left{width:300px; flex-shrink:0; display:flex; flex-direction:column; gap:14px;}
+  .va-detail-media{display:flex; flex-direction:column; gap:6px;}
   .va-detail-media iframe{width:100%; height:clamp(260px, 50vh, 480px); border:none; border-radius:8px; background:#f2f2f2; display:block;}
   .va-detail-media .embed-note{font-size:11px; color:var(--text-soft); line-height:1.4;}
   .va-detail-fields{flex:1; min-width:320px; display:flex; flex-direction:column; gap:10px;}
@@ -192,7 +198,10 @@
   }
   .va-card:hover{border-color:#C7CCD4; box-shadow:0 4px 14px rgba(20,25,35,.06);}
   .va-card.unsorted{border-style:dashed;}
-  .va-card.selected{border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-soft);}
+  .va-card.selected{
+    border-color:var(--accent); background:var(--accent-soft);
+    box-shadow:0 0 0 2px var(--accent), 0 6px 18px rgba(59,91,219,.18);
+  }
   .va-card.dragging{opacity:.45;}
   .va-card-top{display:flex; align-items:flex-start; justify-content:space-between; gap:8px;}
   .va-coll-chip{display:flex; align-items:center; gap:6px; font-size:11.5px; font-weight:600;}
@@ -230,94 +239,8 @@
   .tag-option-create{color:var(--accent); font-weight:600;}
   .tag-empty{font-size:12px; color:var(--text-faint); padding:6px 4px;}
 
-  /* ================= Variant B — Gallery (dark) ================= */
-  body[data-variant="b"]{background:#14171C; color:#E7E9EC;}
-  body[data-variant="b"] .note-placeholder{color:#6E7480;}
-  .vb-shell{max-width:1180px; margin:0 auto; padding:0 30px 60px;}
-  .vb-header{display:flex; align-items:center; gap:14px; padding:26px 0 16px;}
-  .vb-brand{font-size:17px; font-weight:700; color:#fff;}
-  .vb-header .spacer{flex:1;}
-  body[data-variant="b"] input.search{background:#1F242C; border-color:#2C323C; color:#E7E9EC;}
-  body[data-variant="b"] select.sort{background:#1F242C; border-color:#2C323C; color:#E7E9EC;}
-  body[data-variant="b"] .btn-ghost{border-color:#2C323C; color:#E7E9EC;}
-  body[data-variant="b"] .btn-ghost:hover{background:#1F242C;}
-  body[data-variant="b"] details.menu .menu-panel{background:#1F242C; border-color:#2C323C;}
-  body[data-variant="b"] details.menu .menu-panel button{color:#E7E9EC;}
-  body[data-variant="b"] details.menu .menu-panel button:hover{background:#262C36;}
-
-  .vb-pillrow{display:flex; gap:8px; flex-wrap:wrap; padding-bottom:20px; border-bottom:1px solid #23282F; margin-bottom:22px;}
-  .vb-pill{
-    background:#1B1F26; border:1px solid #262C35; color:#C6CAD2; border-radius:999px;
-    padding:7px 14px; font-size:12.5px; display:flex; align-items:center; gap:7px;
-  }
-  .vb-pill:hover{border-color:#3A414D;}
-  .vb-pill.active{background:#fff; color:#14171C; border-color:#fff; font-weight:600;}
-  .vb-pill .va-dot{width:7px; height:7px;}
-
-  .vb-heading{display:flex; align-items:baseline; gap:10px; margin-bottom:16px;}
-  .vb-heading h1{font-size:19px; margin:0; font-weight:700; color:#fff;}
-  .vb-heading .count{color:#7A8190; font-size:12.5px;}
-
-  .vb-banner{border-radius:14px; padding:28px 30px; margin-bottom:24px; position:relative; overflow:hidden;}
-  .vb-banner h1{font-size:24px; margin:0 0 10px; color:#fff;}
-  .vb-banner .note{font-family:var(--font-serif); font-size:16px; line-height:1.6; color:rgba(255,255,255,.92); max-width:66ch;}
-  .vb-banner .row{display:flex; gap:10px; margin-top:14px;}
-  .vb-banner .row .btn-ghost{border-color:rgba(255,255,255,.35); color:#fff;}
-  .vb-banner .row .btn-ghost:hover{background:rgba(255,255,255,.12);}
-
-  .vb-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(228px,1fr)); gap:16px;}
-  .vb-card{background:#1B1F26; border:1px solid #262C35; border-radius:12px; overflow:hidden; cursor:pointer; position:relative;}
-  .vb-card:hover{border-color:#3A414D; transform:translateY(-2px); box-shadow:0 10px 24px rgba(0,0,0,.35);}
-  .vb-media{height:96px; position:relative; display:flex; align-items:center; justify-content:center;}
-  .vb-media .label{position:absolute; left:9px; bottom:8px; font-size:10.5px; font-weight:700; color:rgba(255,255,255,.92); background:rgba(0,0,0,.28); padding:3px 8px; border-radius:999px;}
-  .vb-card-body{padding:13px 14px 14px; display:flex; flex-direction:column; gap:8px;}
-  .vb-card .post-title{color:#fff;}
-  .vb-card .post-desc{color:#DADDE2; -webkit-line-clamp:3;}
-  .vb-card-bottom{display:flex; align-items:center; justify-content:space-between; font-size:11px; color:#7A8190;}
-  .vb-card-bottom a{text-decoration:none; color:#9AA1AB;}
-  .vb-card-bottom a:hover{color:#fff;}
-  body[data-variant="b"] .icon-btn{color:#9AA1AB;}
-  body[data-variant="b"] .icon-btn:hover{background:#262C36; color:#fff;}
-
-  /* ================= Variant C — List ================= */
-  .vc-shell{max-width:920px; margin:0 auto; padding:0 28px 60px;}
-  .vc-topbar{display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:24px 0 6px;}
-  .vc-brand{font-size:14px; color:var(--text-faint);}
-  .vc-view-select{
-    font-size:16px; font-weight:700; border:none; background:none; color:var(--text);
-    padding:2px 4px; border-radius:6px; max-width:260px;
-  }
-  .vc-view-select:hover{background:var(--surface-sunken);}
-  .vc-topbar .spacer{flex:1;}
-
-  .vc-notecard{
-    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
-    padding:16px 18px; margin:14px 0 18px; display:flex; gap:12px; align-items:flex-start;
-  }
-  .vc-notecard .swatch{width:12px; height:12px; border-radius:50%; margin-top:5px; flex-shrink:0;}
-  .vc-notecard .note{font-family:var(--font-serif); font-size:14.5px; line-height:1.55; flex:1;}
-  .vc-notecard .row{margin-top:8px;}
-
-  .vc-list{border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); overflow:hidden;}
-  .vc-row{
-    display:flex; align-items:center; gap:12px; padding:11px 16px; border-bottom:1px solid var(--border-soft);
-    cursor:pointer;
-  }
-  .vc-row:last-child{border-bottom:none;}
-  .vc-row:hover{background:var(--surface-sunken);}
-  .vc-row .va-dot{width:8px; height:8px; flex-shrink:0;}
-  .vc-row .note{font-family:var(--font-serif); font-size:13.5px; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
-  .vc-row .coll{font-size:11.5px; color:var(--text-soft); width:150px; flex-shrink:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
-  .vc-row .date{font-size:11px; color:var(--text-faint); width:64px; flex-shrink:0; text-align:right;}
-  .vc-row .actions{display:flex; gap:2px; flex-shrink:0; opacity:0; }
-  .vc-row:hover .actions{opacity:1;}
-  .vc-list-head{display:flex; gap:12px; padding:8px 16px; font-size:11px; color:var(--text-faint); text-transform:uppercase; letter-spacing:.03em;}
-  .vc-list-head .coll{width:150px; flex-shrink:0;}
-  .vc-list-head .date{width:64px; flex-shrink:0; text-align:right;}
-
   /* ---------- shared: empty state ---------- */
   .empty{text-align:center; padding:70px 20px; color:var(--text-soft);}
-  body[data-variant="b"] .empty{color:#9AA1AB;}
   .empty h2{font-size:17px; margin:0 0 8px; font-weight:700;}
   .empty p{font-size:13.5px; max-width:44ch; margin:0 auto; line-height:1.5;}
 
@@ -347,10 +270,6 @@
   }
   .swatch-picker button.selected{border-color:var(--text);}
 
-  .embed-wrap{margin-bottom:16px;}
-  .embed-wrap iframe{width:100%; min-width:280px; border:none; min-height:400px; border-radius:8px; background:#f2f2f2; display:block;}
-  .embed-note{font-size:11px; color:var(--text-soft); margin-top:6px; line-height:1.4;}
-
   /* ---------- shared: toast ---------- */
   .toast{
     position:fixed; bottom:78px; left:50%; transform:translateX(-50%);
@@ -359,64 +278,13 @@
   }
   .toast.show{opacity:1;}
 
-  /* ---------- prototype switcher bar (not part of the design) ---------- */
-  .switcher{
-    position:fixed; bottom:18px; left:50%; transform:translateX(-50%);
-    background:#14171C; color:#fff; border-radius:999px; padding:6px 6px 6px 14px;
-    display:flex; align-items:center; gap:10px; box-shadow:0 8px 24px rgba(0,0,0,.35); z-index:100;
-    font-size:12.5px; font-family:var(--font-sans);
-  }
-  .switcher button{
-    background:rgba(255,255,255,.12); border:none; color:#fff; width:26px; height:26px;
-    border-radius:50%; font-size:13px; line-height:1;
-  }
-  .switcher button:hover{background:rgba(255,255,255,.22);}
-  .switcher .label{min-width:150px; text-align:center;}
-  .switcher .label b{font-weight:700;}
 </style>
 </head>
-<body data-variant="a">
+<body>
 
 <div id="app"></div>
 
-<!-- Post add/edit modal (shared across variants) -->
-<div class="overlay hidden" id="postOverlay">
-  <div class="modal">
-    <h2 id="postModalTitle">Add a Post</h2>
-    <div class="embed-wrap hidden" id="embedWrap">
-      <div id="embedInner"></div>
-      <div class="embed-note">Live preview from Instagram — if it doesn't load (private posts sometimes can't be embedded), use Open post below.</div>
-    </div>
-    <form id="postForm">
-      <div class="field">
-        <label for="f-link">Link</label>
-        <input type="url" id="f-link" placeholder="https://instagram.com/p/…" required>
-      </div>
-      <div class="field">
-        <label for="f-collection">Collection</label>
-        <select id="f-collection"></select>
-      </div>
-      <div class="field">
-        <label for="f-title">Title</label>
-        <input type="text" id="f-title" placeholder="First sentence of the description, or your own title">
-      </div>
-      <div class="field">
-        <label for="f-description">Description — the post's caption on Instagram</label>
-        <textarea id="f-description" class="note-input" placeholder="Paste or edit the caption/legend for this post"></textarea>
-      </div>
-      <div class="field">
-        <label for="f-post-note">Post Note — your own private note</label>
-        <textarea id="f-post-note" class="note-input" placeholder="Why did you save this? (optional)"></textarea>
-      </div>
-      <div class="modal-actions">
-        <button type="button" class="btn-ghost" id="postCancel">Cancel</button>
-        <button type="submit" class="btn-primary">Save Post</button>
-      </div>
-    </form>
-  </div>
-</div>
-
-<!-- Collection add/edit modal (shared across variants) -->
+<!-- Collection add/edit modal -->
 <div class="overlay hidden" id="collectionOverlay">
   <div class="modal">
     <h2 id="collModalTitle">New Collection</h2>
@@ -455,21 +323,9 @@
 
 <div class="toast" id="toast"></div>
 
-<!-- Prototype-only: variant switcher, not part of the design being evaluated -->
-<div class="switcher" id="switcher">
-  <button id="switchPrev" aria-label="Previous variant">←</button>
-  <span class="label" id="switchLabel"></span>
-  <button id="switchNext" aria-label="Next variant">→</button>
-</div>
-
 <script>
 (function(){
   const PALETTE = ['#B5533C','#4C6B8A','#6B7A4F','#B8863B','#7A5670','#3D6E8F','#9C5B8C','#5E7A9A','#A6763C','#4A7C6B','#8C6B47','#6E5B8C'];
-  const VARIANTS = [
-    {key:'a', name:'Sidebar'},
-    {key:'b', name:'Gallery'},
-    {key:'c', name:'List'},
-  ];
 
   const now = Date.now();
   const daysAgo = (n) => now - n*86400000;
@@ -516,24 +372,22 @@
   ];
 
   let state = {
-    variant: 'a',
     view: 'all', // 'all' | 'unsorted' | 'collection:<id>'
     search: '',
     sort: 'newest',
-    editingPostId: null,
     editingCollectionId: null,
     editingCollectionColor: PALETTE[0],
     pendingConfirm: null,
-    detailMode: null, // variant A only: null | 'new' | <postId> — the inline detail panel
-    colorPopoverFor: null, // variant A only: collection id whose color popover is open
-    groupByTag: false, // variant A only: group the current view's posts by tag instead of a flat grid
-    tagAdderOpen: false, // variant A only: is the "+ Add tag" popover open on the currently open post
-    tagQuery: '', // variant A only: search text inside the tag adder popover
-    tagEditingId: null, // variant A only: tag id whose rename/recolor popover is open
+    detailMode: null, // null | 'new' | <postId> — the inline detail panel
+    collHeaderExpanded: false, // manually expanded the collection header back out while a post is open
+    colorPopoverFor: null, // collection id whose color popover is open
+    groupByTag: false, // group the current view's posts by tag instead of a flat grid
+    tagAdderOpen: false, // is the "+ Add tag" popover open on the currently open post
+    tagQuery: '', // search text inside the tag adder popover
+    tagEditingId: null, // tag id whose rename/recolor popover is open
   };
-  let newPostTitleManual = false; // variant A: has the title been hand-edited for the post currently being created
-  let modalTitleManual = false; // variants B/C shared modal: same idea, scoped to the modal's open lifetime
-  let newPostTagIds = []; // variant A: tags staged for the post currently being created
+  let newPostTitleManual = false; // has the title been hand-edited for the post currently being created
+  let newPostTagIds = []; // tags staged for the post currently being created
 
   const $ = (sel) => document.querySelector(sel);
   const uid = (p) => p + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
@@ -600,7 +454,6 @@
   }
   function stubToast(){ showToast('Prototype only — not wired to real data'); }
 
-  // ---------------- shared bits used inside variant markup ----------------
   function dataMenuHtml(){
     return `
       <details class="menu" id="dataMenu">
@@ -626,7 +479,6 @@
     return 'All posts';
   }
 
-  // ================= Variant A — Sidebar =================
   function renderA(){
     const unsortedCount = posts.filter(p => !p.collectionId).length;
     const nav = `
@@ -663,21 +515,32 @@
         <button class="btn-primary" id="addPostBtn">+ Add a link</button>
       </div>`;
 
+    const detailOpen = state.detailMode !== null;
+
     let headerBlock = '';
+    let collHeaderBlock = '';
     if(state.view.startsWith('collection:')){
       const c = getCollection(state.view.slice(11));
       if(c){
-        headerBlock = `
-          <div class="va-collheader" style="border-top:4px solid ${c.color}">
-            <div class="swatch-wrap">
-              <button type="button" class="swatch-btn" data-action="color-swatch" data-id="${c.id}" style="background:${c.color}" title="Change color"></button>
-              ${state.colorPopoverFor === c.id ? colorPopoverHtml(c) : ''}
-            </div>
-            <div style="flex:1; min-width:0;">
-              <input type="text" id="coll-name-input" data-id="${c.id}" class="name-input" value="${escapeHtml(c.name)}" placeholder="Collection name">
-              <textarea id="coll-note-input" data-id="${c.id}" class="note-input-inline" placeholder="Add a Collection Note — what's this collection for?">${escapeHtml(c.note)}</textarea>
-            </div>
-          </div>`;
+        // While a post is open, the header defaults to a compact bar so it doesn't push the
+        // detail panel (whose max-height only accounts for the sticky toolbar) below the fold.
+        collHeaderBlock = (detailOpen && !state.collHeaderExpanded)
+          ? `<button type="button" class="va-collheader-compact" id="collHeaderExpandBtn" style="border-left:4px solid ${c.color}" title="Show Collection Note">
+               <span class="va-dot" style="background:${c.color}"></span>
+               <span class="name">${escapeHtml(c.name) || '(untitled)'}</span>
+               <span class="chevron">▾</span>
+             </button>`
+          : `<div class="va-collheader" style="border-top:4px solid ${c.color}">
+               ${detailOpen ? `<button type="button" class="icon-btn va-collheader-collapse" id="collHeaderCollapseBtn" title="Collapse">▴</button>` : ''}
+               <div class="swatch-wrap">
+                 <button type="button" class="swatch-btn" data-action="color-swatch" data-id="${c.id}" style="background:${c.color}" title="Change color"></button>
+                 ${state.colorPopoverFor === c.id ? colorPopoverHtml(c) : ''}
+               </div>
+               <div style="flex:1; min-width:0; ${detailOpen ? 'padding-right:30px;' : ''}">
+                 <input type="text" id="coll-name-input" data-id="${c.id}" class="name-input" value="${escapeHtml(c.name)}" placeholder="Collection name">
+                 <textarea id="coll-note-input" data-id="${c.id}" class="note-input-inline" placeholder="Add a Collection Note — what's this collection for?">${escapeHtml(c.note)}</textarea>
+               </div>
+             </div>`;
       }
     } else {
       headerBlock = `<div class="va-heading"><h1>${viewTitle()}</h1><span class="count">${postsForView().length} posts</span></div>`;
@@ -689,14 +552,14 @@
       : state.groupByTag
         ? renderGroupedByTag(list)
         : `<div class="va-grid">${list.map(cardA).join('')}</div>`;
-    const detailOpen = state.detailMode !== null;
-    const stickyTopActive = detailOpen || state.view.startsWith('collection:');
-    const topBlock = `<div class="va-sticky-top ${stickyTopActive ? 'is-sticky' : ''}">${topbar}${headerBlock}</div>`;
+    // Toolbar is always sticky so it stays reachable while the grid scrolls; the collection
+    // header is deliberately kept outside this wrapper so it is never sticky.
+    const topBlock = `<div class="va-sticky-top">${topbar}${headerBlock}</div>`;
     const gridArea = detailOpen
       ? `<div class="va-content-row">${renderDetailPanel()}<div class="va-grid-wrap">${grid}</div></div>`
       : grid;
 
-    return `<div class="va-shell">${nav}<div class="va-main">${topBlock}${gridArea}</div></div>`;
+    return `<div class="va-shell">${nav}<div class="va-main">${topBlock}${collHeaderBlock}${gridArea}</div></div>`;
   }
   function renderGroupedByTag(list){
     const groups = new Map(); // '__untagged__' | tagId -> posts[], in list order
@@ -839,13 +702,13 @@
       </div>`;
     return `
       <div class="va-detail" id="detailPanel">
+        <button class="icon-btn va-detail-close" id="detailClose" title="Close">✕</button>
         <div class="va-detail-scroll">
-          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
-            <h2>${isNew ? 'Add a Post' : 'Edit Post'}</h2>
-            <button class="icon-btn" id="detailClose" title="Close">✕</button>
-          </div>
           <div class="va-detail-body">
-            ${media}
+            <div class="va-detail-left">
+              <h2>${isNew ? 'Add a Post' : 'Edit Post'}</h2>
+              ${media}
+            </div>
             <div class="va-detail-fields">
               ${linkRow}
               ${tagRowHtml()}
@@ -867,189 +730,37 @@
       </div>`;
   }
 
-  // ================= Variant B — Gallery (dark) =================
-  function renderB(){
-    const unsortedCount = posts.filter(p => !p.collectionId).length;
-    const header = `
-      <div class="vb-header">
-        <div class="vb-brand">Socials Organizer</div>
-        <div class="spacer"></div>
-        <input type="text" class="search" id="searchInput" placeholder="Search notes, links…" value="${escapeHtml(state.search)}">
-        ${sortSelectHtml()}
-        <button class="btn-primary" id="addPostBtn">+ Add a link</button>
-        <details class="menu" id="moreMenu">
-          <summary class="btn-ghost">⋯</summary>
-          <div class="menu-panel">
-            <button type="button" id="newCollBtn2">+ New collection</button>
-            <button type="button" id="bulkBtn2">Add several links</button>
-            <button type="button" data-stub="1">Import export file…</button>
-            <button type="button" data-stub="1">Download backup (JSON)</button>
-            <button type="button" data-stub="1">Restore from backup…</button>
-          </div>
-        </details>
-      </div>`;
-
-    const pills = `
-      <div class="vb-pillrow">
-        <button class="vb-pill ${state.view==='all'?'active':''}" data-view="all">All (${posts.length})</button>
-        <button class="vb-pill ${state.view==='unsorted'?'active':''}" data-view="unsorted">To sort (${unsortedCount})</button>
-        ${collections.map(c => {
-          const n = posts.filter(p => p.collectionId===c.id).length;
-          return `<button class="vb-pill ${state.view==='collection:'+c.id?'active':''}" data-view="collection:${c.id}"><span class="va-dot" style="background:${c.color}"></span>${escapeHtml(c.name)} (${n})</button>`;
-        }).join('')}
-      </div>`;
-
-    let headerBlock = '';
-    if(state.view.startsWith('collection:')){
-      const c = getCollection(state.view.slice(11));
-      if(c){
-        headerBlock = `
-          <div class="vb-banner" style="background:linear-gradient(135deg, ${c.color} 0%, #14171C 130%)">
-            <h1>${escapeHtml(c.name)}</h1>
-            ${c.note ? `<div class="note">${escapeHtml(c.note)}</div>` : `<div class="note" style="color:rgba(255,255,255,.75); font-style:italic;">No Collection Note yet.</div>`}
-            <div class="row">
-              <button class="btn-ghost" data-action="edit-collection" data-id="${c.id}">Edit collection</button>
-            </div>
-          </div>`;
-      }
-    } else {
-      headerBlock = `<div class="vb-heading"><h1>${viewTitle()}</h1><span class="count">${postsForView().length} posts</span></div>`;
-    }
-
-    const list = visiblePosts();
-    const grid = list.length
-      ? `<div class="vb-grid">${list.map(cardB).join('')}</div>`
-      : emptyBlock();
-
-    return `<div class="vb-shell">${header}${pills}${headerBlock}${grid}</div>`;
-  }
-  function cardB(p){
-    const c = getCollection(p.collectionId);
-    const bg = c ? c.color : '#3A414D';
-    const label = c ? escapeHtml(c.name) : 'To sort';
-    const icon = isVideoLink(p.link)
-      ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="11" fill="rgba(255,255,255,0.18)"/><path d="M9.5 7.5v9l8-4.5-8-4.5z" fill="#fff"/></svg>'
-      : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2" stroke="#fff" stroke-width="1.6"/><circle cx="8.5" cy="10" r="1.6" fill="#fff"/><path d="M4 16l5-4 3 2.5 4-3.5 4 4" stroke="#fff" stroke-width="1.6" fill="none" stroke-linejoin="round"/></svg>';
-    const titleHtml = p.title ? `<div class="post-title">${escapeHtml(p.title)}</div>` : `<div class="post-title note-placeholder">Untitled</div>`;
-    const descHtml = p.description ? `<div class="post-desc">${escapeHtml(p.description)}</div>` : `<div class="post-desc note-placeholder">No description yet.</div>`;
-    return `
-      <div class="vb-card" data-id="${p.id}">
-        <div class="vb-media" style="background:${bg}">${icon}<span class="label">${label}</span></div>
-        <div class="vb-card-body">
-          <div class="post-textblock">${titleHtml}${descHtml}</div>
-          <div class="vb-card-bottom">
-            <a href="${escapeHtml(p.link)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Open ↗</a>
-            <button class="icon-btn" data-action="delete" data-id="${p.id}" title="Delete">✕</button>
-          </div>
-        </div>
-      </div>`;
-  }
-
-  // ================= Variant C — List =================
-  function renderC(){
-    const unsortedCount = posts.filter(p => !p.collectionId).length;
-    const topbar = `
-      <div class="vc-topbar">
-        <span class="vc-brand">Socials Organizer /</span>
-        <select class="vc-view-select" id="viewSelect">
-          <option value="all" ${state.view==='all'?'selected':''}>All posts (${posts.length})</option>
-          <option value="unsorted" ${state.view==='unsorted'?'selected':''}>To sort (${unsortedCount})</option>
-          ${collections.map(c => {
-            const n = posts.filter(p => p.collectionId===c.id).length;
-            return `<option value="collection:${c.id}" ${state.view==='collection:'+c.id?'selected':''}>${escapeHtml(c.name)} (${n})</option>`;
-          }).join('')}
-        </select>
-        <div class="spacer"></div>
-        <input type="text" class="search" id="searchInput" placeholder="Search…" value="${escapeHtml(state.search)}">
-        ${sortSelectHtml()}
-        <button class="btn-primary" id="addPostBtn">+ Add</button>
-        <details class="menu" id="moreMenuC">
-          <summary class="btn-ghost">⋯</summary>
-          <div class="menu-panel">
-            <button type="button" id="newCollBtn3">+ New collection</button>
-            <button type="button" id="bulkBtn3">Add several links</button>
-            <button type="button" data-stub="1">Import export file…</button>
-            <button type="button" data-stub="1">Download backup (JSON)</button>
-            <button type="button" data-stub="1">Restore from backup…</button>
-          </div>
-        </details>
-      </div>`;
-
-    let noteCard = '';
-    if(state.view.startsWith('collection:')){
-      const c = getCollection(state.view.slice(11));
-      if(c){
-        noteCard = `
-          <div class="vc-notecard">
-            <span class="swatch" style="background:${c.color}"></span>
-            <div>
-              ${c.note ? `<div class="note">${escapeHtml(c.note)}</div>` : `<div class="note note-placeholder">No Collection Note yet.</div>`}
-              <div class="row"><button class="btn-text" data-action="edit-collection" data-id="${c.id}">Edit collection</button></div>
-            </div>
-          </div>`;
-      }
-    }
-
-    const list = visiblePosts();
-    let body;
-    if(list.length){
-      body = `
-        <div class="vc-list-head"><span style="flex:1">Note</span><span class="coll">Collection</span><span class="date">Saved</span><span style="width:46px"></span></div>
-        <div class="vc-list">${list.map(rowC).join('')}</div>`;
-    } else {
-      body = emptyBlock();
-    }
-
-    return `<div class="vc-shell">${topbar}${noteCard || `<div style="height:6px"></div>`}${body}</div>`;
-  }
-  function rowC(p){
-    const c = getCollection(p.collectionId);
-    const title = p.title ? escapeHtml(p.title) : '<span class="note-placeholder">Untitled</span>';
-    return `
-      <div class="vc-row" data-id="${p.id}">
-        <span class="va-dot" style="background:${c ? c.color : 'var(--text-faint)'}"></span>
-        <span class="note" title="${escapeHtml(p.description)}">${title}</span>
-        <span class="coll">${c ? escapeHtml(c.name) : 'To sort'}</span>
-        <span class="date">${formatDate(p.createdAt)}</span>
-        <span class="actions">
-          <a class="icon-btn" href="${escapeHtml(p.link)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open">↗</a>
-          <button class="icon-btn" data-action="delete" data-id="${p.id}" title="Delete">✕</button>
-        </span>
-      </div>`;
-  }
-
   function emptyBlock(){
     return `<div class="empty"><h2>Nothing here</h2><p>Try a different search, or add a link to get started.</p></div>`;
   }
 
   // ---------------- render dispatch + handlers ----------------
   function render(){
-    document.body.setAttribute('data-variant', state.variant);
     const app = $('#app');
-    if(state.variant === 'a') app.innerHTML = renderA();
-    else if(state.variant === 'b') app.innerHTML = renderB();
-    else app.innerHTML = renderC();
+    app.innerHTML = renderA();
     attachHandlers();
-    renderSwitcher();
     syncDetailPanelStickyOffset();
   }
   function syncDetailPanelStickyOffset(){
-    const topBlock = document.querySelector('.va-sticky-top.is-sticky');
+    const topBlock = document.querySelector('.va-sticky-top');
     const detail = document.querySelector('.va-detail');
     if(!topBlock || !detail) return;
+    // The (non-sticky) collection header still occupies space above the detail panel — even
+    // collapsed to its compact bar — so it has to be counted in, or the panel's max-height
+    // would assume more room than is actually left below the fold.
+    const collHeader = document.querySelector('.va-collheader, .va-collheader-compact');
+    const collHeaderHeight = collHeader ? collHeader.offsetHeight + 22 : 0;
     const top = topBlock.offsetHeight + 18;
     detail.style.top = top + 'px';
-    detail.style.maxHeight = `calc(100vh - ${top + 20}px)`;
+    detail.style.maxHeight = `calc(100vh - ${top + collHeaderHeight + 20}px)`;
   }
 
   function attachHandlers(){
     const app = $('#app');
 
     app.querySelectorAll('[data-view]').forEach(el => {
-      el.addEventListener('click', () => { state.view = el.dataset.view; render(); });
+      el.addEventListener('click', () => { state.view = el.dataset.view; closeDetailPanel(); render(); });
     });
-    const viewSelect = $('#viewSelect');
-    if(viewSelect) viewSelect.addEventListener('change', (e) => { state.view = e.target.value; render(); });
 
     const searchInput = $('#searchInput');
     if(searchInput) searchInput.addEventListener('input', (e) => {
@@ -1063,13 +774,11 @@
     const sortSelect = $('#sortSelect');
     if(sortSelect) sortSelect.addEventListener('change', (e) => { state.sort = e.target.value; render(); });
 
-    app.querySelectorAll('[data-id]').forEach(el => {
-      if(el.classList.contains('va-card') || el.classList.contains('vb-card') || el.classList.contains('vc-row')){
-        el.addEventListener('click', (e) => {
-          if(e.target.closest('[data-action="delete"]') || e.target.closest('a')) return;
-          openPost(el.dataset.id);
-        });
-      }
+    app.querySelectorAll('.va-card').forEach(el => {
+      el.addEventListener('click', (e) => {
+        if(e.target.closest('[data-action="delete"]') || e.target.closest('a')) return;
+        openPost(el.dataset.id);
+      });
     });
     app.querySelectorAll('[data-action="delete"]').forEach(btn => {
       btn.addEventListener('click', (e) => {
@@ -1081,24 +790,24 @@
         });
       });
     });
-    app.querySelectorAll('[data-action="edit-collection"]').forEach(btn => {
-      btn.addEventListener('click', (e) => { e.stopPropagation(); openCollectionModal(btn.dataset.id); });
-    });
 
     const addPostBtn = $('#addPostBtn'); if(addPostBtn) addPostBtn.addEventListener('click', () => openPostNew());
-    const newCollBtn = $('#newCollBtn') || $('#newCollBtn2') || $('#newCollBtn3');
-    if(newCollBtn) newCollBtn.addEventListener('click', () => { closeAllMenus(); openCollectionModal(); });
-    ['#bulkBtn','#bulkBtn2','#bulkBtn3'].forEach(sel => { const b = $(sel); if(b) b.addEventListener('click', () => { closeAllMenus(); stubToast(); }); });
+    const newCollBtn = $('#newCollBtn'); if(newCollBtn) newCollBtn.addEventListener('click', () => openCollectionModal());
+    const bulkBtn = $('#bulkBtn'); if(bulkBtn) bulkBtn.addEventListener('click', () => stubToast());
     app.querySelectorAll('[data-stub]').forEach(btn => btn.addEventListener('click', () => { closeAllMenus(); stubToast(); }));
 
-    if(state.variant === 'a') attachHandlersA();
+    attachHandlersA();
   }
-  function closeAllMenus(){ app_querySelectorAllDetails(); }
-  function app_querySelectorAllDetails(){ document.querySelectorAll('details.menu[open]').forEach(d => d.removeAttribute('open')); }
+  function closeAllMenus(){ document.querySelectorAll('details.menu[open]').forEach(d => d.removeAttribute('open')); }
 
-  // ---------------- variant A: inline collection editing, color popover, detail panel, drag & drop ----------------
+  // ---------------- inline collection editing, color popover, detail panel, drag & drop ----------------
   function attachHandlersA(){
     const app = $('#app');
+
+    const collHeaderExpandBtn = $('#collHeaderExpandBtn');
+    if(collHeaderExpandBtn) collHeaderExpandBtn.addEventListener('click', () => { state.collHeaderExpanded = true; render(); });
+    const collHeaderCollapseBtn = $('#collHeaderCollapseBtn');
+    if(collHeaderCollapseBtn) collHeaderCollapseBtn.addEventListener('click', () => { state.collHeaderExpanded = false; render(); });
 
     const nameInput = $('#coll-name-input');
     if(nameInput) nameInput.addEventListener('input', (e) => {
@@ -1351,71 +1060,15 @@
     state.detailMode = null;
     resetDetailPopovers();
   }
-  function openPost(id){
-    if(state.variant === 'a'){ resetDetailPopovers(); state.detailMode = id; render(); }
-    else openPostModal(id);
-  }
+  function openPost(id){ resetDetailPopovers(); state.detailMode = id; state.collHeaderExpanded = false; render(); }
   function openPostNew(){
-    if(state.variant === 'a'){ newPostTitleManual = false; newPostTagIds = []; resetDetailPopovers(); state.detailMode = 'new'; render(); }
-    else openPostModal();
-  }
-
-  // ---------------- post modal ----------------
-  function openPostModal(id){
-    state.editingPostId = id || null;
-    const p = id ? posts.find(x => x.id === id) : null;
-    $('#postModalTitle').textContent = p ? 'Edit Post' : 'Add a Post';
-    $('#f-link').value = p ? p.link : '';
-    $('#f-title').value = p ? p.title : '';
-    $('#f-description').value = p ? p.description : '';
-    $('#f-post-note').value = p ? p.note : '';
-    modalTitleManual = p ? !!p.titleManual : false;
-    const sel = $('#f-collection');
-    sel.innerHTML = `<option value="">No collection (To sort)</option>` +
-      collections.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
-    sel.value = p ? (p.collectionId || '') : (state.view.startsWith('collection:') ? state.view.slice(11) : '');
-
-    const embedWrap = $('#embedWrap');
-    const embedInner = $('#embedInner');
-    const parsed = p && p.link ? parseInstagramLink(p.link) : null;
-    if(parsed){
-      embedWrap.classList.remove('hidden');
-      embedInner.innerHTML = `<iframe src="https://www.instagram.com/${parsed.type === 'tv' ? 'tv' : parsed.type}/${parsed.code}/embed" loading="lazy" allowfullscreen scrolling="no"></iframe>`;
-    } else {
-      embedWrap.classList.add('hidden');
-      embedInner.innerHTML = '';
-    }
-    $('#postOverlay').classList.remove('hidden');
-    setTimeout(() => $('#f-link').focus(), 30);
-  }
-  function closePostModal(){ $('#postOverlay').classList.add('hidden'); $('#embedInner').innerHTML=''; state.editingPostId = null; }
-  $('#postCancel').addEventListener('click', closePostModal);
-  $('#postOverlay').addEventListener('click', (e) => { if(e.target.id==='postOverlay') closePostModal(); });
-  $('#f-description').addEventListener('input', (e) => {
-    if(!modalTitleManual) $('#f-title').value = firstSentence(e.target.value);
-  });
-  $('#f-title').addEventListener('input', () => { modalTitleManual = true; });
-  $('#postForm').addEventListener('submit', (e) => {
-    e.preventDefault();
-    const link = $('#f-link').value.trim();
-    if(!link) return;
-    const data = {
-      link,
-      title: $('#f-title').value.trim(),
-      description: $('#f-description').value.trim(),
-      titleManual: modalTitleManual,
-      note: $('#f-post-note').value.trim(),
-      collectionId: $('#f-collection').value || null,
-    };
-    if(state.editingPostId){
-      const idx = posts.findIndex(p => p.id === state.editingPostId);
-      if(idx > -1) posts[idx] = {...posts[idx], ...data};
-    } else {
-      posts.push({id: uid('p'), createdAt: Date.now(), ...data});
-    }
-    closePostModal();
+    newPostTitleManual = false;
+    newPostTagIds = [];
+    resetDetailPopovers();
+    state.detailMode = 'new';
+    state.collHeaderExpanded = false;
     render();
-  });
+  }
 
   // ---------------- collection modal ----------------
   function renderColorPicker(){
@@ -1472,51 +1125,15 @@
 
   document.addEventListener('keydown', (e) => {
     if(e.key === 'Escape'){
-      closePostModal(); closeCollectionModal(); $('#confirmOverlay').classList.add('hidden'); closeAllMenus();
+      closeCollectionModal(); $('#confirmOverlay').classList.add('hidden'); closeAllMenus();
       if(state.detailMode !== null || state.colorPopoverFor !== null){
         closeDetailPanel(); state.colorPopoverFor = null; render();
       }
     }
   });
 
-  // ---------------- prototype switcher ----------------
-  function currentVariantIndex(){ return VARIANTS.findIndex(v => v.key === state.variant); }
-  function setVariant(key){
-    state.variant = key;
-    state.view = 'all';
-    state.detailMode = null;
-    state.colorPopoverFor = null;
-    state.groupByTag = false;
-    resetDetailPopovers();
-    const url = new URL(window.location.href);
-    url.searchParams.set('variant', key);
-    window.history.replaceState({}, '', url);
-    render();
-  }
-  function renderSwitcher(){
-    const v = VARIANTS[currentVariantIndex()];
-    $('#switchLabel').innerHTML = `${v.key.toUpperCase()} — <b>${v.name}</b>`;
-  }
-  $('#switchPrev').addEventListener('click', () => {
-    const i = currentVariantIndex();
-    setVariant(VARIANTS[(i - 1 + VARIANTS.length) % VARIANTS.length].key);
-  });
-  $('#switchNext').addEventListener('click', () => {
-    const i = currentVariantIndex();
-    setVariant(VARIANTS[(i + 1) % VARIANTS.length].key);
-  });
-  document.addEventListener('keydown', (e) => {
-    const tag = (document.activeElement && document.activeElement.tagName) || '';
-    if(tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return;
-    if(e.key === 'ArrowLeft') $('#switchPrev').click();
-    if(e.key === 'ArrowRight') $('#switchNext').click();
-  });
-
   // ---------------- init ----------------
   (function init(){
-    const params = new URLSearchParams(window.location.search);
-    const v = params.get('variant');
-    state.variant = VARIANTS.some(x => x.key === v) ? v : 'a';
     render();
   })();
 })();
