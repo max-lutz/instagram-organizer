@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Clipping Box</title>
+<style>
+  :root{
+    --wood:#2B231C;
+    --wood-deep:#1C1712;
+    --wood-light:#3C3226;
+    --paper:#F7EFDD;
+    --paper-dull:#EAE1CC;
+    --paper-flat:#E3D9C0;
+    --ink:#2B2118;
+    --ink-soft:#7A6C58;
+    --cream:#F3E9D2;
+    --cream-dim:rgba(243,233,210,.62);
+    --line:rgba(243,233,210,.14);
+    --other:#8A7F6E;
+    --font-serif: Georgia, 'Iowan Old Style', 'Times New Roman', serif;
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--wood);
+    color:var(--cream);
+    font-family:var(--font-sans);
+    min-height:100vh;
+  }
+  header{
+    padding:32px 32px 8px;
+    max-width:1200px;
+    margin:0 auto;
+  }
+  h1{
+    font-family:var(--font-serif);
+    font-weight:400;
+    font-size:30px;
+    margin:0;
+    color:var(--cream);
+    letter-spacing:.2px;
+  }
+  .tagline{
+    font-size:14px;
+    color:var(--cream-dim);
+    margin:6px 0 0;
+    max-width:56ch;
+    line-height:1.5;
+  }
+  .toolbar{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    margin-top:22px;
+    align-items:center;
+  }
+  input[type="text"].search{
+    flex:1;
+    min-width:180px;
+    max-width:380px;
+    background:var(--wood-light);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:10px 14px;
+    color:var(--cream);
+    font-size:14px;
+    font-family:var(--font-sans);
+  }
+  input[type="text"].search::placeholder{color:rgba(243,233,210,.4);}
+  select{
+    background:var(--wood-light);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:9px 12px;
+    color:var(--cream);
+    font-size:13px;
+    font-family:var(--font-sans);
+    max-width:220px;
+  }
+  select:disabled{opacity:.4;}
+  .spacer{flex:1;}
+  button{font-family:var(--font-sans); cursor:pointer;}
+  .btn-primary{
+    background:var(--paper);
+    color:var(--ink);
+    border:none;
+    border-radius:8px;
+    padding:10px 18px;
+    font-size:14px;
+    font-weight:600;
+  }
+  .btn-primary:hover{background:#fff;}
+  .btn-ghost{
+    background:transparent;
+    border:1px solid var(--line);
+    color:var(--cream);
+    border-radius:8px;
+    padding:9px 14px;
+    font-size:13px;
+  }
+  .btn-ghost:hover{background:var(--wood-light);}
+  .btn-ghost.active{background:var(--paper); color:var(--ink); border-color:var(--paper);}
+  .filters-row{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    align-items:center;
+    max-width:1200px;
+    margin:16px auto 0;
+    padding:0 32px;
+  }
+  .filters-row label{font-size:12px; color:var(--cream-dim);}
+  .panel{
+    max-width:1200px;
+    margin:18px auto 40px;
+    background:var(--paper-dull);
+    border-radius:10px;
+    padding:24px;
+    min-height:260px;
+  }
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(240px, 1fr));
+    gap:16px;
+  }
+  .group-heading{
+    font-family:var(--font-serif);
+    font-size:17px;
+    color:var(--ink);
+    margin:26px 0 12px;
+    padding-bottom:7px;
+    border-bottom:1px solid rgba(43,33,24,.15);
+  }
+  .group-section:first-child .group-heading{margin-top:0;}
+  .group-heading .count{font-size:12px; color:var(--ink-soft); font-weight:400; margin-left:6px;}
+
+  .card{
+    background:var(--paper);
+    border-radius:8px;
+    position:relative;
+    box-shadow:0 2px 6px rgba(43,33,24,.15);
+    border:1px solid rgba(43,33,24,.07);
+    display:flex;
+    flex-direction:column;
+    cursor:pointer;
+    overflow:hidden;
+  }
+  @media (prefers-reduced-motion:no-preference){
+    .card{transition:transform .15s ease, box-shadow .15s ease;}
+    .card:hover{transform:translateY(-2px); box-shadow:0 8px 16px rgba(43,33,24,.2);}
+  }
+  .card.untriaged{
+    border:1px dashed rgba(43,33,24,.3);
+  }
+  .media-strip{
+    height:76px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-shrink:0;
+  }
+  .card-body{
+    padding:14px 16px 14px;
+    display:flex;
+    flex-direction:column;
+    gap:9px;
+    flex:1;
+  }
+  .card-top{display:flex; align-items:flex-start; justify-content:space-between; gap:8px;}
+  .icon-btn{
+    background:none; border:none; color:var(--ink-soft);
+    font-size:13px; padding:2px 4px; opacity:.45; border-radius:4px;
+    line-height:1;
+  }
+  .icon-btn:hover{opacity:1; background:rgba(43,33,24,.08);}
+  .coll-label{
+    font-size:12px;
+    font-weight:600;
+    font-family:var(--font-sans);
+  }
+  .note{
+    font-family:var(--font-serif);
+    font-size:15px;
+    line-height:1.45;
+    color:var(--ink);
+    flex:1;
+  }
+  .card .note{
+    display:-webkit-box;
+    -webkit-line-clamp:5;
+    -webkit-box-orient:vertical;
+    overflow:hidden;
+  }
+  .note.placeholder{color:var(--ink-soft); font-style:italic;}
+  .link-row{
+    display:flex; align-items:center; gap:6px;
+    font-size:12px; color:var(--ink-soft); text-decoration:none;
+  }
+  .link-row:hover{color:var(--ink);}
+  .tags{display:flex; flex-wrap:wrap; gap:6px;}
+  .tag-pill{
+    background:rgba(43,33,24,.08);
+    color:var(--ink-soft);
+    font-size:11px;
+    padding:3px 9px;
+    border-radius:12px;
+  }
+  .badge-row{display:flex; align-items:center; justify-content:space-between; gap:8px;}
+  .status-badge{
+    font-size:11px; font-weight:600; padding:4px 10px; border-radius:4px;
+    background:rgba(43,33,24,.08); color:var(--ink);
+    white-space:nowrap;
+  }
+  .sort-btn{
+    background:var(--ink); color:var(--paper-flat);
+    border:none; border-radius:5px; padding:6px 11px; font-size:12px; font-weight:600;
+    align-self:flex-start;
+  }
+  .empty{
+    text-align:center; padding:60px 20px; color:var(--ink-soft);
+  }
+  .empty h2{font-family:var(--font-serif); font-weight:400; color:var(--ink); margin:0 0 8px; font-size:22px;}
+  .empty p{font-size:14px; max-width:44ch; margin:0 auto 20px; line-height:1.5;}
+  .empty .actions{display:flex; gap:10px; justify-content:center; flex-wrap:wrap;}
+  .empty .btn-dark{background:var(--ink); color:var(--paper); border:none; border-radius:8px; padding:10px 18px; font-size:14px; font-weight:600;}
+
+  .overlay{
+    position:fixed; inset:0; background:rgba(20,16,11,.62);
+    display:flex; align-items:center; justify-content:center;
+    padding:20px; z-index:60;
+  }
+  .hidden{display:none !important;}
+  .modal{
+    background:var(--paper);
+    border-radius:10px;
+    padding:26px;
+    width:100%;
+    max-width:460px;
+    max-height:88vh;
+    overflow-y:auto;
+    box-shadow:0 20px 50px rgba(0,0,0,.4);
+  }
+  .modal h2{font-family:var(--font-serif); font-weight:400; font-size:21px; color:var(--ink); margin:0 0 18px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block; font-size:12px; color:var(--ink-soft); margin-bottom:5px;}
+  .field input, .field select, .field textarea{
+    width:100%; padding:9px 11px; border:1px solid rgba(43,33,24,.2);
+    border-radius:6px; background:#fff; color:var(--ink); font-size:14px;
+    font-family:var(--font-sans);
+  }
+  .field textarea.note-input{font-family:var(--font-serif); font-size:15px; min-height:76px; resize:vertical;}
+  .field textarea.bulk-input{min-height:140px; font-family:var(--font-sans); font-size:13px;}
+  .modal-actions{display:flex; justify-content:flex-end; gap:10px; margin-top:6px;}
+  .hint{font-size:12px; color:var(--ink-soft); margin:-6px 0 14px; line-height:1.5;}
+
+  .embed-wrap{margin-bottom:18px;}
+  .embed-wrap iframe{width:100%; min-width:280px; border:none; min-height:420px; border-radius:8px; background:#fff; display:block;}
+  .embed-note{font-size:11px; color:var(--ink-soft); margin-top:6px; line-height:1.4;}
+
+  .spotlight-card{background:var(--paper); border-radius:10px; padding:28px; max-width:480px; width:100%; position:relative; max-height:90vh; overflow-y:auto;}
+  .spotlight-label{font-size:12px; color:var(--ink-soft); margin-bottom:14px;}
+  .spotlight-note{font-family:var(--font-serif); font-size:19px; line-height:1.5; color:var(--ink); margin-bottom:16px;}
+  .spotlight-actions{display:flex; gap:8px; flex-wrap:wrap; margin-top:18px;}
+
+  footer{
+    max-width:1200px; margin:0 auto; padding:0 32px 36px;
+    display:flex; justify-content:flex-end; gap:18px;
+  }
+  footer button{background:none; border:none; color:var(--cream-dim); font-size:12px; text-decoration:underline;}
+  footer button:hover{color:var(--cream);}
+
+  .toast{
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+    background:var(--ink); color:var(--paper); padding:10px 18px; border-radius:8px;
+    font-size:13px; z-index:80; opacity:0; pointer-events:none;
+    transition:opacity .25s ease;
+    max-width:90vw; text-align:center;
+  }
+  .toast.show{opacity:1;}
+
+  .status-line{padding:22px 32px 0; max-width:1200px; margin:0 auto; font-size:13px; color:var(--cream-dim);}
+
+  @media (max-width:640px){
+    header, .filters-row, footer{padding-left:18px; padding-right:18px;}
+    .panel{margin-left:18px; margin-right:18px; padding:16px;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>The Clipping Box</h1>
+  <p class="tagline">A place for the recipes, tips, and tutorials you keep saving — so you can actually find them, remember why you saved them, and use them.</p>
+  <div class="toolbar">
+    <input type="text" class="search" id="searchInput" placeholder="Search notes, tags, links…">
+    <select id="statusFilter">
+      <option value="all">Any status</option>
+      <option value="to-try">To try</option>
+      <option value="in-progress">In progress</option>
+      <option value="done">Done</option>
+      <option value="reference">Reference</option>
+    </select>
+    <div class="spacer"></div>
+    <button class="btn-ghost" id="bulkBtn">Add several links</button>
+    <button class="btn-ghost" id="importFileBtn">Import export file</button>
+    <input type="file" id="importFileInput" accept=".html,.htm,text/html" style="display:none">
+    <button class="btn-ghost" id="surpriseBtn">Surprise me</button>
+    <button class="btn-primary" id="addBtn">+ Add a link</button>
+  </div>
+</header>
+
+<div id="loadingLine" class="status-line">Opening the box…</div>
+
+<div id="mainArea" class="hidden">
+  <div class="filters-row">
+    <label for="collectionFilter">Collection</label>
+    <select id="collectionFilter"></select>
+    <label for="sortMode">Sort</label>
+    <select id="sortMode">
+      <option value="newest">Newest saved</option>
+      <option value="oldest">Oldest saved</option>
+      <option value="collection">Collection (A–Z)</option>
+    </select>
+    <button class="btn-ghost" id="groupToggle">Group by collection</button>
+  </div>
+  <div class="panel" id="panel"></div>
+  <footer>
+    <button id="exportBtn">Export as CSV</button>
+    <button id="resetBtn">Clear all data</button>
+  </footer>
+</div>
+
+<!-- Add/Edit Modal -->
+<div class="overlay hidden" id="editOverlay">
+  <div class="modal">
+    <h2 id="modalTitle">Add to the box</h2>
+    <div class="embed-wrap hidden" id="embedWrap">
+      <div id="embedInner"></div>
+      <div class="embed-note">Live preview from Instagram — if it doesn't load (private posts sometimes can't be embedded), use Open post below.</div>
+    </div>
+    <form id="editForm">
+      <div class="field">
+        <label for="f-link">Link</label>
+        <input type="url" id="f-link" placeholder="https://instagram.com/p/…" required>
+      </div>
+      <div class="field">
+        <label for="f-category">Collection</label>
+        <input type="text" id="f-category" list="categoryOptions" placeholder="Type or pick a collection — leave blank for unsorted">
+        <datalist id="categoryOptions"></datalist>
+      </div>
+      <div class="field">
+        <label for="f-note">Your note — why did you save this?</label>
+        <textarea id="f-note" class="note-input" placeholder="e.g. Weeknight pasta with anchovies, want to try with the good parmesan"></textarea>
+      </div>
+      <div class="field">
+        <label for="f-status">Status</label>
+        <select id="f-status">
+          <option value="to-try">To try</option>
+          <option value="in-progress">In progress</option>
+          <option value="done">Done</option>
+          <option value="reference">Reference</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="f-tags">Tags</label>
+        <input type="text" id="f-tags" placeholder="comma-separated, e.g. pasta, weeknight">
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" id="cancelEdit" style="color:var(--ink); border-color:rgba(43,33,24,.25);">Cancel</button>
+        <button type="submit" class="btn-primary" id="saveBtn">Save card</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Bulk Add Modal -->
+<div class="overlay hidden" id="bulkOverlay">
+  <div class="modal">
+    <h2>Add several links</h2>
+    <p class="hint">Paste one link per line — from your Instagram export, or copied straight from the app. These go into the box unsorted; you can open each one and fill in a note whenever you're ready.</p>
+    <div class="field">
+      <textarea id="bulkTextarea" class="bulk-input" placeholder="https://instagram.com/p/…&#10;https://instagram.com/p/…"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn-ghost" id="cancelBulk" style="color:var(--ink); border-color:rgba(43,33,24,.25);">Cancel</button>
+      <button type="button" class="btn-primary" id="submitBulk">Add links</button>
+    </div>
+  </div>
+</div>
+
+<!-- Surprise Me Modal -->
+<div class="overlay hidden" id="surpriseOverlay">
+  <div class="spotlight-card" id="spotlightCard"></div>
+</div>
+
+<!-- Confirm Modal (delete / reset) -->
+<div class="overlay hidden" id="confirmOverlay">
+  <div class="modal" style="max-width:380px;">
+    <h2 id="confirmTitle">Are you sure?</h2>
+    <p class="hint" id="confirmBody" style="margin-top:-4px;"></p>
+    <div class="modal-actions">
+      <button type="button" class="btn-ghost" id="confirmCancel" style="color:var(--ink); border-color:rgba(43,33,24,.25);">Cancel</button>
+      <button type="button" class="btn-primary" id="confirmOk" style="background:#B5533C; color:#fff;">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  const STATUS_LABELS = {
+    'to-try':'To try', 'in-progress':'In progress', 'done':'Done', 'reference':'Reference', '':'Not sorted yet'
+  };
+  // Deterministic warm/muted palette for dynamically-named collections —
+  // the same collection name always lands on the same color.
+  const PALETTE = ['#B5533C','#4C6B8A','#6B7A4F','#B8863B','#7A5670','#3D6E8F','#9C5B8C','#5E7A9A','#A6763C','#4A7C6B','#8C6B47','#6E5B8C'];
+  function colorForCategory(name){
+    if(!name) return 'var(--other)';
+    let hash = 0;
+    for(let i=0;i<name.length;i++){ hash = (hash*31 + name.charCodeAt(i)) >>> 0; }
+    return PALETTE[hash % PALETTE.length];
+  }
+
+  const PLAY_SVG = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="11" fill="rgba(255,255,255,0.18)"/><path d="M9.5 7.5v9l8-4.5-8-4.5z" fill="#fff"/></svg>';
+  const PHOTO_SVG = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2" stroke="#fff" stroke-width="1.6"/><circle cx="8.5" cy="10" r="1.6" fill="#fff"/><path d="M4 16l5-4 3 2.5 4-3.5 4 4" stroke="#fff" stroke-width="1.6" fill="none" stroke-linejoin="round"/></svg>';
+
+  let items = [];
+  let filterCategory = 'all'; // 'all' | '__unsorted__' | category name
+  let filterStatus = 'all';
+  let searchQuery = '';
+  let sortMode = 'newest';
+  let groupByCollection = false;
+  let editingId = null;
+  let pendingConfirm = null;
+
+  const $ = (sel) => document.querySelector(sel);
+
+  function uid(){ return 'itm_' + Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+
+  function getCategories(){
+    const counts = new Map();
+    items.forEach(it => { if(it.category){ counts.set(it.category, (counts.get(it.category)||0) + 1); } });
+    return [...counts.entries()].sort((a,b) => a[0].localeCompare(b[0]));
+  }
+
+  function parseInstagramLink(link){
+    const m = (link || '').match(/instagram\.com\/(p|reel|tv)\/([^/?]+)/i);
+    if(!m) return null;
+    return {type: m[1].toLowerCase(), code: m[2]};
+  }
+  function isVideoLink(link){
+    return /instagram\.com\/(reel|tv)\//i.test(link || '');
+  }
+
+  async function loadItems(){
+    try {
+      const res = await window.storage.get('saved-posts', false);
+      items = (res && res.value) ? JSON.parse(res.value) : [];
+    } catch (e) {
+      items = [];
+    }
+  }
+
+  async function persist(){
+    try {
+      const res = await window.storage.set('saved-posts', JSON.stringify(items), false);
+      if(!res){ showToast('Could not save — try again'); }
+    } catch(e){
+      showToast('Could not save — try again');
+    }
+  }
+
+  function showToast(msg){
+    const t = $('#toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(()=>t.classList.remove('show'), 2600);
+  }
+
+  function escapeHtml(str){
+    return (str || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  // Decodes HTML entities and strips any inner tags from a raw HTML fragment,
+  // e.g. a caption that contains <br> or &#39; — using the browser's own parser
+  // rather than guessing at every entity ourselves.
+  function decodeAndStrip(fragment){
+    if(!fragment) return '';
+    const div = document.createElement('div');
+    div.innerHTML = fragment;
+    return (div.textContent || '').replace(/\s+/g, ' ').trim();
+  }
+
+  // Parses a Meta/Instagram "Download your information" saved-collections export.
+  // The markup is deeply and inconsistently nested, so rather than walking the
+  // DOM tree, we split on two kinds of landmark rows that reliably appear in a
+  // fixed order: each collection's own "Contenu multimédia" heading (preceded
+  // by that collection's "Nom"), and each post's own URL row within it.
+  function parseInstagramExport(raw){
+    const collStarts = [];
+    const collRe = /<h2[^>]*>Contenu multimédia<\/h2>/g;
+    let cm;
+    while((cm = collRe.exec(raw)) !== null) collStarts.push(cm.index);
+
+    function collectionNameBefore(pos){
+      const windowStart = Math.max(0, pos - 4000);
+      const chunk = raw.slice(windowStart, pos);
+      let lastMatch = null, nm;
+      const localRe = /<td class="_a6_q">Nom<\/td><td class="_2piu _a6_r">([\s\S]*?)<\/td>/g;
+      while((nm = localRe.exec(chunk)) !== null) lastMatch = nm;
+      return lastMatch ? decodeAndStrip(lastMatch[1]) : '';
+    }
+
+    const urlRe = /<td colspan="2" class="_a6_q">URL<div><a target="_blank" href="(https:\/\/www\.instagram\.com\/[^"]+)">/g;
+    const urlMarks = [];
+    let um;
+    while((um = urlRe.exec(raw)) !== null) urlMarks.push({href: um[1], index: um.index});
+
+    const results = [];
+    let collIdx = -1;
+    let collName = '';
+    for(let i = 0; i < urlMarks.length; i++){
+      const pos = urlMarks[i].index;
+      while(collIdx + 1 < collStarts.length && collStarts[collIdx+1] <= pos){
+        collIdx++;
+        collName = collectionNameBefore(collStarts[collIdx]);
+      }
+      const start = pos;
+      const end = (i + 1 < urlMarks.length) ? urlMarks[i+1].index : raw.length;
+      const slice = raw.slice(start, end);
+
+      const capM = slice.match(/<td class="_a6_q">Légende<\/td><td class="_2piu _a6_r">([\s\S]*?)<\/td>/);
+      const caption = capM ? decodeAndStrip(capM[1]) : '';
+
+      let tags = [];
+      const hSecM = slice.match(/<h2[^>]*>Hashtags<\/h2>([\s\S]*?)(?:<h2|$)/);
+      if(hSecM){
+        const tagRe = /<div class="_a6-p">([a-zA-Z0-9_]{1,60})<\/div>/g;
+        let tm;
+        while((tm = tagRe.exec(hSecM[1])) !== null) tags.push(tm[1]);
+      }
+      tags = [...new Set(tags)].slice(0, 8);
+
+      let owner = '';
+      const oSecM = slice.match(/<h2[^>]*>Propriétaire<\/h2>([\s\S]*?)(?:<h2|$)/);
+      if(oSecM){
+        const ownerM = oSecM[1].match(/<td class="_a6_q">Nom de profil<\/td><td class="_2piu _a6_r">([\s\S]*?)<\/td>/);
+        owner = ownerM ? decodeAndStrip(ownerM[1]) : '';
+      }
+
+      let note = caption;
+      if(owner) note = note ? `@${owner} — ${note}` : `@${owner}`;
+
+      results.push({link: urlMarks[i].href, note, tags, category: collName});
+    }
+    return results;
+  }
+
+  function passesSearchStatus(item){
+    if(filterStatus !== 'all' && item.status !== filterStatus) return false;
+    if(searchQuery){
+      const hay = [item.note, item.link, item.category, (item.tags||[]).join(' ')].join(' ').toLowerCase();
+      if(!hay.includes(searchQuery.toLowerCase())) return false;
+    }
+    return true;
+  }
+  function passesCollectionFilter(item){
+    if(filterCategory === 'all') return true;
+    if(filterCategory === '__unsorted__') return item.category === '';
+    return item.category === filterCategory;
+  }
+
+  function sortItems(list){
+    const arr = list.slice();
+    if(sortMode === 'oldest') arr.sort((a,b) => (a.createdAt||0) - (b.createdAt||0));
+    else if(sortMode === 'collection') arr.sort((a,b) => (a.category || '\uffff').localeCompare(b.category || '\uffff'));
+    else arr.sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
+    return arr;
+  }
+
+  function renderFiltersRow(){
+    const cats = getCategories();
+    const unsortedCount = items.filter(i => i.category === '').length;
+    const sel = $('#collectionFilter');
+    const prevVal = sel.value || filterCategory;
+    sel.innerHTML = `<option value="all">All collections (${items.length})</option>` +
+      (unsortedCount ? `<option value="__unsorted__">Unsorted (${unsortedCount})</option>` : '') +
+      cats.map(([name,count]) => `<option value="${escapeHtml(name)}">${escapeHtml(name)} (${count})</option>`).join('');
+    const stillValid = [...sel.options].some(o => o.value === prevVal);
+    sel.value = stillValid ? prevVal : 'all';
+    filterCategory = sel.value;
+    sel.disabled = groupByCollection;
+  }
+
+  function mediaStripHtml(item){
+    const color = item.category ? colorForCategory(item.category) : 'var(--other)';
+    const icon = isVideoLink(item.link) ? PLAY_SVG : PHOTO_SVG;
+    return `<div class="media-strip" style="background:${color}">${icon}</div>`;
+  }
+
+  function cardHtml(item){
+    const isUnsorted = item.category === '';
+    const color = colorForCategory(item.category);
+    const noteHtml = item.note
+      ? `<div class="note">${escapeHtml(item.note)}</div>`
+      : `<div class="note placeholder">No note yet — click to describe why you saved this.</div>`;
+    const tagsHtml = (item.tags && item.tags.length)
+      ? `<div class="tags">${item.tags.map(t => `<span class="tag-pill">${escapeHtml(t)}</span>`).join('')}</div>`
+      : '';
+    const collLabel = !isUnsorted ? `<div class="coll-label" style="color:${color}">${escapeHtml(item.category)}</div>` : '';
+
+    if(isUnsorted){
+      return `
+        <div class="card untriaged" data-id="${item.id}">
+          ${mediaStripHtml(item)}
+          <div class="card-body">
+            <div class="card-top">
+              <a class="link-row" href="${escapeHtml(item.link)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Open post</a>
+              <button class="icon-btn" data-action="delete" data-id="${item.id}" title="Delete">✕</button>
+            </div>
+            ${item.note ? noteHtml : '<div class="note placeholder">Not sorted yet.</div>'}
+            ${tagsHtml}
+            <button class="sort-btn" data-action="edit" data-id="${item.id}">Sort this</button>
+          </div>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="card" data-id="${item.id}">
+        ${mediaStripHtml(item)}
+        <div class="card-body">
+          <div class="card-top">
+            <a class="link-row" href="${escapeHtml(item.link)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Open post</a>
+            <button class="icon-btn" data-action="delete" data-id="${item.id}" title="Delete">✕</button>
+          </div>
+          ${collLabel}
+          ${noteHtml}
+          ${tagsHtml}
+          <div class="badge-row">
+            <span class="status-badge">${STATUS_LABELS[item.status] || 'To try'}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function emptyBlock(title, body, showActions){
+    return `
+      <div class="empty">
+        <h2>${title}</h2>
+        <p>${body}</p>
+        ${showActions ? `
+        <div class="actions">
+          <button class="btn-dark" id="emptyAddBtn">Add a link</button>
+          <button class="btn-ghost" id="emptyBulkBtn" style="color:var(--ink); border-color:rgba(43,33,24,.3);">Add several at once</button>
+        </div>` : ''}
+      </div>`;
+  }
+
+  function attachGridHandlers(){
+    const panel = $('#panel');
+    panel.querySelectorAll('.card').forEach(card => {
+      card.addEventListener('click', (e) => {
+        if(e.target.closest('[data-action="delete"]') || e.target.closest('.link-row')) return;
+        openEditModal(card.dataset.id);
+      });
+    });
+    panel.querySelectorAll('[data-action="delete"]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        confirmAction('Delete this card?', 'This removes it from your box for good.', () => deleteItem(btn.dataset.id));
+      });
+    });
+    panel.querySelectorAll('[data-action="edit"]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openEditModal(btn.dataset.id);
+      });
+    });
+    const emptyAdd = $('#emptyAddBtn');
+    const emptyBulk = $('#emptyBulkBtn');
+    if(emptyAdd) emptyAdd.addEventListener('click', () => openEditModal());
+    if(emptyBulk) emptyBulk.addEventListener('click', () => openBulkModal());
+  }
+
+  function renderGrid(){
+    const panel = $('#panel');
+
+    if(items.length === 0){
+      panel.innerHTML = emptyBlock('Your box is empty', 'Add a link to start, or paste in a batch from your saved posts and sort them whenever you have a few minutes.', true);
+      attachGridHandlers();
+      return;
+    }
+
+    if(groupByCollection){
+      const matched = items.filter(passesSearchStatus);
+      if(matched.length === 0){
+        panel.innerHTML = emptyBlock('Nothing here', 'Try a different search or status.', false);
+        return;
+      }
+      const groups = new Map();
+      matched.forEach(it => {
+        const key = it.category || '__unsorted__';
+        if(!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(it);
+      });
+      const keys = [...groups.keys()].sort((a,b) => {
+        if(a === '__unsorted__') return 1;
+        if(b === '__unsorted__') return -1;
+        return a.localeCompare(b);
+      });
+      panel.innerHTML = keys.map(key => {
+        const list = sortItems(groups.get(key));
+        const label = key === '__unsorted__' ? 'Unsorted' : key;
+        return `
+          <div class="group-section">
+            <div class="group-heading">${escapeHtml(label)}<span class="count">${list.length}</span></div>
+            <div class="grid">${list.map(cardHtml).join('')}</div>
+          </div>`;
+      }).join('');
+    } else {
+      const matched = items.filter(it => passesSearchStatus(it) && passesCollectionFilter(it));
+      if(matched.length === 0){
+        panel.innerHTML = emptyBlock('Nothing here', 'Try a different search, collection, or status.', false);
+        return;
+      }
+      panel.innerHTML = `<div class="grid">${sortItems(matched).map(cardHtml).join('')}</div>`;
+    }
+    attachGridHandlers();
+  }
+
+  function renderAll(){
+    renderFiltersRow();
+    renderGrid();
+  }
+
+  // ---- Add / Edit ----
+  function openEditModal(id){
+    editingId = id || null;
+    const item = id ? items.find(i => i.id === id) : null;
+    $('#modalTitle').textContent = item ? 'Edit card' : 'Add to the box';
+    $('#f-link').value = item ? item.link : '';
+    $('#f-category').value = item ? item.category : '';
+    $('#f-note').value = item ? item.note : '';
+    $('#f-status').value = item ? (item.status || 'to-try') : 'to-try';
+    $('#f-tags').value = item && item.tags ? item.tags.join(', ') : '';
+
+    const catList = $('#categoryOptions');
+    catList.innerHTML = getCategories().map(([name]) => `<option value="${escapeHtml(name)}">`).join('');
+
+    const embedWrap = $('#embedWrap');
+    const embedInner = $('#embedInner');
+    const parsed = item && item.link ? parseInstagramLink(item.link) : null;
+    if(parsed){
+      embedWrap.classList.remove('hidden');
+      embedInner.innerHTML = `<iframe src="https://www.instagram.com/${parsed.type === 'tv' ? 'tv' : parsed.type}/${parsed.code}/embed" loading="lazy" allowfullscreen scrolling="no"></iframe>`;
+    } else {
+      embedWrap.classList.add('hidden');
+      embedInner.innerHTML = '';
+    }
+
+    $('#editOverlay').classList.remove('hidden');
+    setTimeout(() => $('#f-link').focus(), 50);
+  }
+  function closeEditModal(){
+    $('#editOverlay').classList.add('hidden');
+    $('#embedInner').innerHTML = '';
+    editingId = null;
+  }
+
+  $('#addBtn').addEventListener('click', () => openEditModal());
+  $('#cancelEdit').addEventListener('click', closeEditModal);
+  $('#editOverlay').addEventListener('click', (e) => { if(e.target.id === 'editOverlay') closeEditModal(); });
+
+  $('#editForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const link = $('#f-link').value.trim();
+    if(!link) return;
+    const tags = $('#f-tags').value.split(',').map(t => t.trim()).filter(Boolean);
+    const data = {
+      link,
+      category: $('#f-category').value.trim(),
+      note: $('#f-note').value.trim(),
+      status: $('#f-status').value,
+      tags,
+    };
+    if(editingId){
+      const idx = items.findIndex(i => i.id === editingId);
+      if(idx > -1) items[idx] = {...items[idx], ...data};
+    } else {
+      items.push({id: uid(), createdAt: Date.now(), ...data});
+    }
+    await persist();
+    closeEditModal();
+    renderAll();
+  });
+
+  function deleteItem(id){
+    items = items.filter(i => i.id !== id);
+    persist();
+    renderAll();
+  }
+
+  // ---- Bulk add (plain pasted links — no collection info available) ----
+  function openBulkModal(){
+    $('#bulkTextarea').value = '';
+    $('#bulkOverlay').classList.remove('hidden');
+    setTimeout(() => $('#bulkTextarea').focus(), 50);
+  }
+  function closeBulkModal(){ $('#bulkOverlay').classList.add('hidden'); }
+
+  $('#bulkBtn').addEventListener('click', openBulkModal);
+  $('#cancelBulk').addEventListener('click', closeBulkModal);
+  $('#bulkOverlay').addEventListener('click', (e) => { if(e.target.id === 'bulkOverlay') closeBulkModal(); });
+
+  $('#submitBulk').addEventListener('click', async () => {
+    const lines = $('#bulkTextarea').value.split('\n').map(l => l.trim()).filter(Boolean);
+    if(lines.length === 0) { closeBulkModal(); return; }
+    const existingLinks = new Set(items.map(i => i.link));
+    let added = 0;
+    lines.forEach(link => {
+      if(existingLinks.has(link)) return;
+      items.push({id: uid(), createdAt: Date.now(), link, category:'', note:'', status:'', tags:[]});
+      existingLinks.add(link);
+      added++;
+    });
+    await persist();
+    closeBulkModal();
+    renderAll();
+    showToast(added ? `Added ${added} link${added===1?'':'s'} to sort later` : 'Nothing new to add');
+  });
+
+  // ---- Import from Instagram/Meta export file ----
+  $('#importFileBtn').addEventListener('click', () => $('#importFileInput').click());
+
+  $('#importFileInput').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if(!file){ return; }
+    try {
+      const text = await file.text();
+      const parsed = parseInstagramExport(text);
+      if(parsed.length === 0){
+        showToast('Could not find any saved posts in that file');
+        e.target.value = '';
+        return;
+      }
+      const existingLinks = new Set(items.map(i => i.link));
+      let added = 0, skipped = 0;
+      parsed.forEach(p => {
+        if(existingLinks.has(p.link)){ skipped++; return; }
+        items.push({id: uid(), createdAt: Date.now(), link: p.link, category: p.category || '', note: p.note, status:'', tags: p.tags});
+        existingLinks.add(p.link);
+        added++;
+      });
+      await persist();
+      renderAll();
+      const collCount = new Set(parsed.map(p => p.category).filter(Boolean)).size;
+      showToast(`Imported ${added} post${added===1?'':'s'} across ${collCount} collection${collCount===1?'':'s'}${skipped ? `, skipped ${skipped} already in your box` : ''}`);
+    } catch(err){
+      showToast('Could not read that file');
+    } finally {
+      e.target.value = '';
+    }
+  });
+
+  // ---- Surprise me ----
+  $('#surpriseBtn').addEventListener('click', () => {
+    const pool = items.filter(i => i.note);
+    if(pool.length === 0){ showToast('Add a note to a card first — then this can surface it'); return; }
+    showSpotlight(pool[Math.floor(Math.random()*pool.length)]);
+  });
+
+  function showSpotlight(item){
+    const parsed = parseInstagramLink(item.link);
+    const embedHtml = parsed
+      ? `<div class="embed-wrap">
+           <iframe src="https://www.instagram.com/${parsed.type === 'tv' ? 'tv' : parsed.type}/${parsed.code}/embed" loading="lazy" allowfullscreen scrolling="no"></iframe>
+           <div class="embed-note">If this doesn't load, use Open post below.</div>
+         </div>`
+      : '';
+    $('#spotlightCard').innerHTML = `
+      <div class="spotlight-label">From the box${item.category ? ' · ' + escapeHtml(item.category) : ''}</div>
+      ${embedHtml}
+      <div class="spotlight-note">${escapeHtml(item.note)}</div>
+      ${(item.tags||[]).length ? `<div class="tags">${item.tags.map(t=>`<span class="tag-pill">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
+      <div class="spotlight-actions">
+        <a class="btn-primary" style="text-decoration:none; display:inline-block;" href="${escapeHtml(item.link)}" target="_blank" rel="noopener">Open post</a>
+        <button class="btn-ghost" id="spotlightEdit" style="color:var(--ink); border-color:rgba(43,33,24,.3);">Edit</button>
+        <button class="btn-ghost" id="spotlightAgain" style="color:var(--ink); border-color:rgba(43,33,24,.3);">Pull another</button>
+        <button class="btn-ghost" id="spotlightClose" style="color:var(--ink); border-color:rgba(43,33,24,.3);">Close</button>
+      </div>
+    `;
+    $('#surpriseOverlay').classList.remove('hidden');
+    $('#spotlightEdit').addEventListener('click', () => { $('#surpriseOverlay').classList.add('hidden'); openEditModal(item.id); });
+    $('#spotlightAgain').addEventListener('click', () => {
+      const pool = items.filter(i => i.note);
+      showSpotlight(pool[Math.floor(Math.random()*pool.length)]);
+    });
+    $('#spotlightClose').addEventListener('click', () => { $('#surpriseOverlay').classList.add('hidden'); $('#spotlightCard').innerHTML=''; });
+  }
+  $('#surpriseOverlay').addEventListener('click', (e) => { if(e.target.id === 'surpriseOverlay'){ $('#surpriseOverlay').classList.add('hidden'); $('#spotlightCard').innerHTML=''; } });
+
+  // ---- Confirm modal ----
+  function confirmAction(title, body, onConfirm){
+    $('#confirmTitle').textContent = title;
+    $('#confirmBody').textContent = body;
+    pendingConfirm = onConfirm;
+    $('#confirmOverlay').classList.remove('hidden');
+  }
+  $('#confirmCancel').addEventListener('click', () => { $('#confirmOverlay').classList.add('hidden'); pendingConfirm = null; });
+  $('#confirmOk').addEventListener('click', () => {
+    if(pendingConfirm) pendingConfirm();
+    $('#confirmOverlay').classList.add('hidden');
+    pendingConfirm = null;
+  });
+  $('#confirmOverlay').addEventListener('click', (e) => { if(e.target.id === 'confirmOverlay'){ $('#confirmOverlay').classList.add('hidden'); pendingConfirm=null; } });
+
+  // ---- Export / Reset ----
+  function csvEscape(val){
+    const s = String(val ?? '');
+    if(/[",\n]/.test(s)) return '"' + s.replace(/"/g,'""') + '"';
+    return s;
+  }
+  $('#exportBtn').addEventListener('click', () => {
+    const header = ['Link','Collection','Note','Status','Tags','Date saved'];
+    const rows = items.map(i => [
+      i.link,
+      i.category || 'Unsorted',
+      i.note,
+      STATUS_LABELS[i.status] || '',
+      (i.tags||[]).join('; '),
+      i.createdAt ? new Date(i.createdAt).toISOString().slice(0,10) : ''
+    ]);
+    const csv = [header, ...rows].map(r => r.map(csvEscape).join(',')).join('\n');
+    const blob = new Blob([csv], {type:'text/csv'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'clipping-box-export.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+
+  $('#resetBtn').addEventListener('click', () => {
+    confirmAction('Clear everything?', 'This deletes every card in your box. Export a CSV first if you want a backup.', async () => {
+      items = [];
+      await persist();
+      renderAll();
+    });
+  });
+
+  // ---- Filters ----
+  $('#searchInput').addEventListener('input', (e) => { searchQuery = e.target.value; renderGrid(); });
+  $('#statusFilter').addEventListener('change', (e) => { filterStatus = e.target.value; renderGrid(); });
+  $('#collectionFilter').addEventListener('change', (e) => { filterCategory = e.target.value; renderGrid(); });
+  $('#sortMode').addEventListener('change', (e) => { sortMode = e.target.value; renderGrid(); });
+  $('#groupToggle').addEventListener('click', () => {
+    groupByCollection = !groupByCollection;
+    $('#groupToggle').classList.toggle('active', groupByCollection);
+    $('#collectionFilter').disabled = groupByCollection;
+    renderGrid();
+  });
+
+  // ---- Keyboard ----
+  document.addEventListener('keydown', (e) => {
+    if(e.key === 'Escape'){
+      closeEditModal();
+      closeBulkModal();
+      $('#surpriseOverlay').classList.add('hidden');
+      $('#confirmOverlay').classList.add('hidden');
+    }
+  });
+
+  // ---- Init ----
+  (async function init(){
+    await loadItems();
+    $('#loadingLine').classList.add('hidden');
+    $('#mainArea').classList.remove('hidden');
+    renderAll();
+  })();
+})();
+</script>
+</body>
+</html>
