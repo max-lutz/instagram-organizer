@@ -1,3 +1,4 @@
+// The API's route table: wires each resource module's handlers to a method + path.
 const { createApiHandler } = require('./router');
 const { createCollectionsApi } = require('./collections');
 const { createTagsApi } = require('./tags');
@@ -20,6 +21,7 @@ function createApiHandlerForDb(db) {
     { method: 'PATCH', path: '/api/tags/:id', handler: tags.update },
     { method: 'DELETE', path: '/api/tags/:id', handler: tags.remove },
 
+    // /api/posts/stats must precede /api/posts/:id -- router.js matches top to bottom.
     { method: 'GET', path: '/api/posts/stats', handler: posts.stats },
     { method: 'GET', path: '/api/posts', handler: posts.list },
     { method: 'POST', path: '/api/posts', handler: posts.create },

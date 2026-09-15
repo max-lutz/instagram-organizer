@@ -1,9 +1,15 @@
+// JSON API for Posts: CRUD, list/search/sort (issue #5), and Tag attach/detach
+// with the 4-tags-per-post cap (CONTEXT.md). Route shape was this ticket's
+// (issue #12) to decide.
 const { HttpError } = require('./http-error');
 const { parseId } = require('./params');
 
 const PROVENANCE_VALUES = ['manual', 'bulk-paste', 'instagram-import'];
+// CONTEXT.md: "a Post can carry up to 4 [Tags]." App-level only -- not enforced by the schema.
 const MAX_TAGS_PER_POST = 4;
 
+// node:sqlite throws a plain Error with no typed constraint-violation class,
+// so we detect UNIQUE conflicts (posts.link is UNIQUE) by message.
 function isUniqueViolation(err) {
   return err.code === 'ERR_SQLITE_ERROR' && /UNIQUE constraint failed/.test(err.message);
 }
@@ -20,13 +26,15 @@ function optionalString(value, existing) {
   return value === null ? null : String(value);
 }
 
-// Mirrors the prototype's title-default heuristic (docs/reference/prototype/v0.1/redesign-prototype.html).
+// Mirrors the prototype's title-default heuristic (docs/reference/prototype/v0.1/redesign-prototype.html:350-354),
+// except it returns null rather than '' for empty input, since posts.title is nullable.
 function firstSentence(text) {
   if (!text) return null;
   const match = text.match(/[^.!?]*[.!?]/);
   return (match ? match[0] : text).trim();
 }
 
+// issue #5's five sort options: "saved" = created_at, "modification" = updated_at.
 function sortClause(sort) {
   switch (sort) {
     case 'saved-asc':
@@ -79,6 +87,8 @@ function createPostsApi(db) {
     if (!collection) throw new HttpError(400, 'Collection not found');
   }
 
+  // collection_id / unassigned drive the sidebar's per-Collection and "To sort"
+  // views; the old main-list Collection dropdown filter itself was dropped (issue #5).
   function list({ query }) {
     let sql = 'SELECT p.* FROM posts p WHERE 1 = 1';
     const args = [];
@@ -90,6 +100,8 @@ function createPostsApi(db) {
       sql += ' AND p.collection_id IS NULL';
     }
 
+    // issue #5: search covers Post Title + Description + Post Note only --
+    // no Tags, no Collection name/note (that's the dedicated Collection view's job).
     const search = (query.get('search') || '').trim();
     if (search !== '') {
       sql += ' AND (LOWER(p.title) LIKE ? OR LOWER(p.description) LIKE ? OR LOWER(p.note) LIKE ?)';
@@ -128,6 +140,8 @@ function createPostsApi(db) {
     const ownerUsername = optionalString(body.owner_username, null);
     const source = body.source !== undefined ? requireString(body.source, 'source') : 'instagram';
 
+    // ADR 0003: an explicit title on create means the caller hand-picked it,
+    // so it's persisted as manual from the start rather than left to auto-derive.
     const titleManual = body.title !== undefined;
     const title = titleManual ? String(body.title) : firstSentence(description);
 
@@ -167,6 +181,8 @@ function createPostsApi(db) {
     return { body: getPostOr404(parseId(params.id)) };
   }
 
+  // issue #3's amended resolution: link is immutable after creation
+  // (app-level only -- the schema itself has no update guard).
   function update({ params, body }) {
     if (body.link !== undefined) throw new HttpError(400, 'link is immutable after creation');
 
@@ -187,6 +203,9 @@ function createPostsApi(db) {
     const ownerName = optionalString(body.owner_name, existing.owner_name);
     const ownerUsername = optionalString(body.owner_username, existing.owner_username);
 
+    // ADR 0003: Title defaults to Description's first sentence and keeps
+    // auto-following it -- until the user hand-edits Title, at which point
+    // title_manual latches on and further Description edits stop touching it.
     let title = existing.title;
     let titleManual = existing.title_manual;
     if (body.title !== undefined) {
@@ -220,6 +239,8 @@ function createPostsApi(db) {
     const tag = db.prepare('SELECT id FROM tags WHERE id = ?').get(tagId);
     if (!tag) throw new HttpError(404, 'Tag not found');
 
+    // Idempotent: re-attaching a tag the post already has is a no-op rather
+    // than a conflict, and doesn't count against the cap below.
     const alreadyAttached = db
       .prepare('SELECT 1 FROM post_tags WHERE post_id = ? AND tag_id = ?')
       .get(postId, tagId);

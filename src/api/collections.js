@@ -1,6 +1,10 @@
+// JSON API for Collections: CRUD plus the keep-or-delete-posts choice on
+// deletion (ADR 0001). Route shape was this ticket's (issue #12) to decide.
 const { HttpError } = require('./http-error');
 const { parseId } = require('./params');
 
+// node:sqlite throws a plain Error with no typed constraint-violation class,
+// so we detect UNIQUE conflicts (collection name is UNIQUE COLLATE NOCASE) by message.
 function isUniqueViolation(err) {
   return err.code === 'ERR_SQLITE_ERROR' && /UNIQUE constraint failed/.test(err.message);
 }
@@ -13,12 +17,16 @@ function requireString(value, field) {
 }
 
 function createCollectionsApi(db) {
+  // Bare row, no post_count join -- used internally where callers only need
+  // the collection's own columns (e.g. as defaults when applying a PATCH).
   function getCollectionRowOr404(id) {
     const collection = db.prepare('SELECT * FROM collections WHERE id = ?').get(id);
     if (!collection) throw new HttpError(404, 'Collection not found');
     return collection;
   }
 
+  // Response-shaped variant: includes post_count so clients (e.g. the
+  // sidebar) don't need a second request per collection just for a badge.
   function getCollectionOr404(id) {
     const collection = db
       .prepare(
@@ -95,6 +103,10 @@ function createCollectionsApi(db) {
     return { body: getCollectionOr404(existing.id) };
   }
 
+  // ADR 0001: deleting a Collection asks the user to keep or delete its
+  // Posts. `deletePosts=true` deletes the Posts first, then the Collection,
+  // inside one transaction. Without it, the FK's ON DELETE SET NULL returns
+  // the Posts to "To sort" as the DB-level default/safety net.
   function remove({ params, query }) {
     const existing = getCollectionRowOr404(parseId(params.id));
     const deletePosts = query.get('deletePosts') === 'true';

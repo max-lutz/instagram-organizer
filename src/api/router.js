@@ -1,5 +1,12 @@
+// Minimal method+path router with JSON in/out, kept dependency-free like the
+// rest of the project (no build tooling, no framework -- see routes.js for
+// the actual route table).
 const { HttpError } = require('./http-error');
 
+// routes: [{ method, path, handler }]. path segments starting with ':'
+// capture into params (e.g. '/api/posts/:id/tags/:tagId'). First match wins,
+// so a static path (e.g. '/api/posts/stats') must be listed before a
+// dynamic one it could otherwise be captured by (e.g. '/api/posts/:id').
 function matchRoute(routes, method, pathname) {
   const pathSegments = pathname.split('/').filter(Boolean);
   for (const route of routes) {
@@ -49,6 +56,9 @@ function sendJson(res, status, body) {
   res.end(payload);
 }
 
+// Returns an (req, res, url) request handler: matches the route, parses the
+// JSON body for write methods, calls the handler, and serializes its result.
+// A thrown HttpError becomes that status + { error }; anything else is a 500.
 function createApiHandler(routes) {
   return async function handleApiRequest(req, res, url) {
     const match = matchRoute(routes, req.method, url.pathname);

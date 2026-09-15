@@ -1,6 +1,10 @@
+// JSON API for Tags: CRUD only. Attaching/detaching a Tag to/from a Post is
+// posts.js's job (it owns the post_tags join and the 4-tags-per-post cap).
 const { HttpError } = require('./http-error');
 const { parseId } = require('./params');
 
+// node:sqlite throws a plain Error with no typed constraint-violation class,
+// so we detect UNIQUE conflicts (tags.name is UNIQUE COLLATE NOCASE) by message.
 function isUniqueViolation(err) {
   return err.code === 'ERR_SQLITE_ERROR' && /UNIQUE constraint failed/.test(err.message);
 }
@@ -63,6 +67,8 @@ function createTagsApi(db) {
     return { body: getTagOr404(existing.id) };
   }
 
+  // issue #3: tag deletion cascades to post_tags via the FK. Confirming with
+  // the user first is a frontend concern -- this endpoint just does the delete.
   function remove({ params }) {
     const existing = getTagOr404(parseId(params.id));
     db.prepare('DELETE FROM tags WHERE id = ?').run(existing.id);
