@@ -3,11 +3,13 @@ const { createApiHandler } = require('./router');
 const { createCollectionsApi } = require('./collections');
 const { createTagsApi } = require('./tags');
 const { createPostsApi } = require('./posts');
+const { createBackupApi } = require('./backup');
 
 function createApiHandlerForDb(db) {
   const collections = createCollectionsApi(db);
   const tags = createTagsApi(db);
   const posts = createPostsApi(db);
+  const backup = createBackupApi(db);
 
   const routes = [
     { method: 'GET', path: '/api/collections', handler: collections.list },
@@ -30,6 +32,9 @@ function createApiHandlerForDb(db) {
     { method: 'DELETE', path: '/api/posts/:id', handler: posts.remove },
     { method: 'POST', path: '/api/posts/:id/tags', handler: posts.attachTag },
     { method: 'DELETE', path: '/api/posts/:id/tags/:tagId', handler: posts.detachTag },
+
+    { method: 'GET', path: '/api/backup', handler: backup.download },
+    { method: 'POST', path: '/api/backup/restore', handler: backup.restore },
   ];
 
   return createApiHandler(routes);

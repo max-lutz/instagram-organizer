@@ -312,8 +312,8 @@
         <summary class="btn-ghost">Data ▾</summary>
         <div class="menu-panel">
           <button type="button" id="importFileBtn">Import export file…</button>
-          <button type="button" data-stub="1">Download backup (JSON)</button>
-          <button type="button" data-stub="1">Restore from backup…</button>
+          <button type="button" id="downloadBackupBtn">Download backup (JSON)</button>
+          <button type="button" id="restoreBackupBtn">Restore from backup…</button>
         </div>
       </details>`;
   }
@@ -1123,6 +1123,80 @@
     });
   }
 
+  // ---------------- JSON backup/restore ----------------
+  // Non-overlapping with Instagram-export import (map #10 Notes): backup
+  // mirrors the app's own data 1:1 (src/api/backup.js) and restore is a full
+  // wipe-and-replace, distinct from import's additive, dedup'd merge.
+  async function performDownloadBackup() {
+    let data;
+    try {
+      data = await apiGet('/api/backup');
+    } catch (err) {
+      showToast(err.message);
+      return;
+    }
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `socials-organizer-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function performRestore(file) {
+    let raw;
+    try {
+      raw = await file.text();
+    } catch {
+      showToast('Could not read that file');
+      return;
+    }
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      showToast('That file is not valid JSON');
+      return;
+    }
+    try {
+      await apiPost('/api/backup/restore', data);
+    } catch (err) {
+      showToast(err.message);
+      return;
+    }
+    try {
+      await closeDetailPanel();
+      await refreshAfterMutation();
+    } catch (err) {
+      showToast(err.message);
+      return;
+    }
+    showToast('Backup restored');
+  }
+
+  function bindBackupHandlers() {
+    const downloadBtn = $('#downloadBackupBtn');
+    if (downloadBtn) downloadBtn.addEventListener('click', () => { closeAllMenus(); performDownloadBackup(); });
+
+    const restoreBtn = $('#restoreBackupBtn');
+    const restoreInput = $('#restoreFileInput');
+    if (!restoreBtn || !restoreInput) return;
+    restoreBtn.addEventListener('click', () => { closeAllMenus(); restoreInput.click(); });
+    restoreInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      e.target.value = '';
+      if (!file) return;
+      confirmAction(
+        'Restore from backup',
+        'This replaces all current posts, collections, and tags with the backup’s contents. This cannot be undone.',
+        () => performRestore(file)
+      );
+    });
+  }
+
   // ---------------- new collection modal ----------------
   function renderColorPicker() {
     $('#colorPicker').innerHTML = PALETTE.map((hex) => `<button type="button" data-color="${hex}" style="background:${hex}" class="${state.editingCollectionColor === hex ? 'selected' : ''}"></button>`).join('');
@@ -1249,6 +1323,7 @@
     bindCollDeleteModalHandlers();
     bindConfirmModalHandlers();
     bindImportInputHandlers();
+    bindBackupHandlers();
     bindGlobalKeydown();
     init();
   }
