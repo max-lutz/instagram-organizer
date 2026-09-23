@@ -671,6 +671,10 @@
     app.querySelectorAll('[data-stub]').forEach((btn) => btn.addEventListener('click', () => { closeAllMenus(); stubToast(); }));
     const importFileBtn = $('#importFileBtn');
     if (importFileBtn) importFileBtn.addEventListener('click', () => { closeAllMenus(); $('#importFileInput').click(); });
+    const downloadBackupBtn = $('#downloadBackupBtn');
+    if (downloadBackupBtn) downloadBackupBtn.addEventListener('click', () => { closeAllMenus(); performDownloadBackup(); });
+    const restoreBackupBtn = $('#restoreBackupBtn');
+    if (restoreBackupBtn) restoreBackupBtn.addEventListener('click', () => { closeAllMenus(); $('#restoreFileInput').click(); });
 
     attachDetailHandlers();
   }
@@ -1177,14 +1181,12 @@
     showToast('Backup restored');
   }
 
-  function bindBackupHandlers() {
-    const downloadBtn = $('#downloadBackupBtn');
-    if (downloadBtn) downloadBtn.addEventListener('click', () => { closeAllMenus(); performDownloadBackup(); });
-
-    const restoreBtn = $('#restoreBackupBtn');
+  // Binds the file input's change listener once -- unlike the two menu
+  // buttons below, #restoreFileInput lives outside #app (public/index.html)
+  // so render()'s app.innerHTML reset never tears it down.
+  function bindRestoreInputHandlers() {
     const restoreInput = $('#restoreFileInput');
-    if (!restoreBtn || !restoreInput) return;
-    restoreBtn.addEventListener('click', () => { closeAllMenus(); restoreInput.click(); });
+    if (!restoreInput) return;
     restoreInput.addEventListener('change', (e) => {
       const file = e.target.files[0];
       e.target.value = '';
@@ -1323,7 +1325,7 @@
     bindCollDeleteModalHandlers();
     bindConfirmModalHandlers();
     bindImportInputHandlers();
-    bindBackupHandlers();
+    bindRestoreInputHandlers();
     bindGlobalKeydown();
     init();
   }
