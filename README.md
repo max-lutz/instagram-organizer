@@ -19,6 +19,10 @@ A personal, local-first tool to display, organize, annotate, and revisit saved I
 
 ## Running
 
+Double-click `Start Socials Organizer.vbs` (Windows) to launch the server in the background and open your browser to it automatically. Close it via the minimized "Socials Organizer" window in the taskbar.
+
+Or from a terminal:
+
 ```
 node --run start
 ```
