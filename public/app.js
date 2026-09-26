@@ -295,6 +295,27 @@
     if (state.detailMode === 'new') return newPostTagIds;
     return activePost ? (activePost.tags || []).map((t) => t.id) : [];
   }
+  // Which collection the open detail panel's tag picker should group by. For an
+  // existing post this is its own collection; for a new, unsaved post there's no
+  // activePost yet, so fall back to whatever's currently picked in the Collection
+  // <select> (same source submitDetail() reads from, see collection_id below).
+  function currentDetailCollectionId() {
+    if (state.detailMode === 'new') {
+      const el = document.getElementById('d-collection');
+      return el ? (el.value || null) : collectionIdFromView(state.view);
+    }
+    return activePost ? (activePost.collection_id ?? null) : null;
+  }
+  // Tag ids used by at least one other Post in the given collection, derived from
+  // the in-memory `posts` array (scoped to the current view -- see buildPostsQuery).
+  function tagIdsUsedInCollection(collectionId) {
+    const ids = new Set();
+    if (collectionId === null || collectionId === undefined || collectionId === '') return ids;
+    posts.forEach((p) => {
+      if (sameId(p.collection_id, collectionId)) (p.tags || []).forEach((t) => ids.add(String(t.id)));
+    });
+    return ids;
+  }
   function isVideoLink(link) { return /instagram\.com\/(reel|tv)\//i.test(link || ''); }
 
   function viewTitle() {
@@ -423,13 +444,13 @@
           : `<div class="va-collheader" style="border-top:4px solid ${c.color}">
                <div class="va-collheader-actions">
                  ${detailOpen ? `<button type="button" class="icon-btn" id="collHeaderCollapseBtn" title="Collapse">▴</button>` : ''}
-                 <button type="button" class="icon-btn" id="collDeleteBtn" data-id="${c.id}" title="Delete collection">🗑</button>
+                 <button type="button" class="btn-ghost" id="collDeleteBtn" data-id="${c.id}" style="color:var(--danger); border-color:var(--danger);" title="Delete this collection">Delete</button>
                </div>
                <div class="swatch-wrap">
                  <button type="button" class="swatch-btn" data-action="color-swatch" data-id="${c.id}" style="background:${c.color}" title="Change color"></button>
                  ${state.colorPopoverFor === String(c.id) ? colorPopoverHtml(c) : ''}
                </div>
-               <div style="flex:1; min-width:0; padding-right:56px;">
+               <div style="flex:1; min-width:0; padding-right:110px;">
                  <input type="text" id="coll-name-input" data-id="${c.id}" class="name-input" value="${escapeHtml(c.name)}" placeholder="Collection name">
                  <select id="coll-section-select" data-id="${c.id}" class="coll-section-select" title="Section">
                    <option value="">No section</option>
@@ -515,12 +536,19 @@
     const q = state.tagQuery.trim().toLowerCase();
     const currentIds = currentTagIds().map(String);
     const matches = tags.filter((t) => currentIds.indexOf(String(t.id)) === -1 && t.name.toLowerCase().includes(q));
+    const usedIds = tagIdsUsedInCollection(currentDetailCollectionId());
+    const usedInCollection = matches.filter((t) => usedIds.has(String(t.id)));
+    const others = matches.filter((t) => !usedIds.has(String(t.id)));
     const exact = tags.some((t) => t.name.toLowerCase() === q);
+    const optionHtml = (t) => `<button type="button" class="tag-option" data-action="attach-tag" data-tagid="${t.id}"><span class="va-dot" style="background:${t.color}"></span>${escapeHtml(t.name)}</button>`;
+    const optionsHtml = usedInCollection.length
+      ? `<div class="tag-option-group-label">Used in this collection</div>${usedInCollection.map(optionHtml).join('')}${others.length ? `<div class="tag-option-group-label">Other tags</div>` : ''}${others.map(optionHtml).join('')}`
+      : matches.map(optionHtml).join('');
     return `
       <div class="tag-popover" id="tagPopover">
         <input type="text" id="tagSearchInput" placeholder="Search or create a tag…" value="${escapeHtml(state.tagQuery)}" autocomplete="off">
         <div class="tag-options">
-          ${matches.map((t) => `<button type="button" class="tag-option" data-action="attach-tag" data-tagid="${t.id}"><span class="va-dot" style="background:${t.color}"></span>${escapeHtml(t.name)}</button>`).join('')}
+          ${optionsHtml}
           ${(!exact && q) ? `<button type="button" class="tag-option tag-option-create" data-action="create-tag">Create "${escapeHtml(state.tagQuery.trim())}"</button>` : ''}
           ${(!matches.length && !q) ? `<div class="tag-empty">Type to search or create a tag</div>` : ''}
         </div>
@@ -538,6 +566,7 @@
   function renderPostCard(p) {
     const c = getCollection(p.collection_id);
     const chip = c ? `<span class="va-coll-chip" style="color:${c.color}"><span class="va-dot" style="background:${c.color}"></span>${escapeHtml(c.name)}</span>` : `<span class="va-coll-chip" style="color:var(--text-faint)">To sort</span>`;
+    const noteFlag = (p.note && p.note.trim()) ? `<span class="va-note-flag" title="Has a Post Note">📝</span>` : '';
     const titleHtml = p.title ? `<div class="post-title">${escapeHtml(p.title)}</div>` : `<div class="post-title note-placeholder">Untitled</div>`;
     const descHtml = p.description ? `<div class="post-desc">${escapeHtml(p.description)}</div>` : `<div class="post-desc note-placeholder">No description yet.</div>`;
     const topBorder = c ? `border-top:4px solid ${c.color};` : '';
@@ -545,7 +574,7 @@
     return `
       <div class="va-card ${!p.collection_id ? 'unsorted' : ''} ${selected}" draggable="true" data-id="${p.id}" style="${topBorder}">
         <div class="va-card-top">
-          ${chip}
+          <span class="va-card-top-left">${chip}${noteFlag}</span>
           <button class="icon-btn" data-action="delete" data-id="${p.id}" title="Delete">✕</button>
         </div>
         <div class="post-textblock">${titleHtml}${descHtml}</div>
