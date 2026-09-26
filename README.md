@@ -19,7 +19,11 @@ A personal, local-first tool to display, organize, annotate, and revisit saved I
 
 ## Running
 
-Double-click `Start Socials Organizer.vbs` (Windows) to launch the server in the background and open your browser to it automatically. Close it via the minimized "Socials Organizer" window in the taskbar.
+Double-click a launcher script to start the server and open your browser to it automatically:
+
+- **Windows**: `Start Socials Organizer.vbs` — runs in the background; close it via the minimized "Socials Organizer" window in the taskbar.
+- **macOS**: `Start Socials Organizer.command` — opens in a Terminal window (first run: right-click → Open to bypass Gatekeeper); close the window to stop the server.
+- **Linux**: `Start Socials Organizer.sh` — mark it executable once (`chmod +x "Start Socials Organizer.sh"`), then run it from your file manager or a terminal; close the terminal to stop the server.
 
 Or from a terminal:
 
