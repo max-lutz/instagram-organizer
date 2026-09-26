@@ -238,6 +238,12 @@
 
   async function savePostFields(id, patch) {
     const updated = await apiPatch(`/api/posts/${id}`, patch);
+    // Unlike saveCollectionFields/saveTagFields, this was only ever updating
+    // activePost -- the `posts` array entry stayed stale, so switching to a
+    // different Post and back within the same view (openPostDetail reads
+    // straight from `posts`, no reload) re-showed the pre-edit Post Note.
+    const idx = posts.findIndex((p) => sameId(p.id, id));
+    if (idx > -1) posts[idx] = updated;
     if (activePost && sameId(activePost.id, id)) {
       activePost = updated;
       const dTitleEl = $('#d-title');
