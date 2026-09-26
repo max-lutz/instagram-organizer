@@ -79,4 +79,41 @@ test('collections CRUD + deletion post-fate', async (t) => {
     const gone = await call('GET', `/api/posts/${post.body.id}`);
     assert.equal(gone.status, 404);
   });
+
+  await t.test('delete with deletePosts=true tombstones its posts (issue #40)', async () => {
+    const coll = await call('POST', '/api/collections', { name: 'PurgeWithTags', color: '#444444' });
+    const tag = await call('POST', '/api/tags', { name: 'purge-tag', color: '#555555' });
+    const post = await call('POST', '/api/posts', {
+      link: 'https://instagram.com/p/purge-tombstone',
+      provenance: 'manual',
+      collection_id: coll.body.id,
+      description: 'Doomed post.',
+    });
+    await call('POST', `/api/posts/${post.body.id}/tags`, { tag_id: tag.body.id });
+
+    await call('DELETE', `/api/collections/${coll.body.id}?deletePosts=true`);
+
+    const tombstone = server.db
+      .prepare('SELECT * FROM deleted_posts WHERE link = ?')
+      .get('https://instagram.com/p/purge-tombstone');
+    assert.ok(tombstone);
+    assert.equal(tombstone.collection_name, 'PurgeWithTags');
+    assert.deepEqual(JSON.parse(tombstone.tags), ['purge-tag']);
+  });
+
+  await t.test('delete without deletePosts does not tombstone survivors', async () => {
+    const coll = await call('POST', '/api/collections', { name: 'NoPurge', color: '#666666' });
+    await call('POST', '/api/posts', {
+      link: 'https://instagram.com/p/no-purge',
+      provenance: 'manual',
+      collection_id: coll.body.id,
+    });
+
+    await call('DELETE', `/api/collections/${coll.body.id}`);
+
+    const tombstone = server.db
+      .prepare('SELECT * FROM deleted_posts WHERE link = ?')
+      .get('https://instagram.com/p/no-purge');
+    assert.equal(tombstone, undefined);
+  });
 });

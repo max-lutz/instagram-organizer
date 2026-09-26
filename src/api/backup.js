@@ -3,10 +3,11 @@
 // resolve on restore. Restore is a full wipe-and-replace, kept a separate code
 // path from the additive Instagram-export import flow (map #10 Notes).
 const { HttpError } = require('./http-error');
+const { createTombstones } = require('./tombstones');
 
-// Bumped from 3 to 4 to add sections and collections.section_id (issue #27),
-// which would otherwise be lost on a restore.
-const SCHEMA_VERSION = 4;
+// Bumped from 4 to 5 to add deleted_posts (issue #40), which would otherwise
+// be lost on a restore.
+const SCHEMA_VERSION = 5;
 
 function requireArray(value, field) {
   if (!Array.isArray(value)) throw new HttpError(400, `${field} must be an array`);
@@ -14,6 +15,8 @@ function requireArray(value, field) {
 }
 
 function createBackupApi(db) {
+  const tombstones = createTombstones(db);
+
   function backupPosts() {
     const rows = db.prepare('SELECT * FROM posts ORDER BY id').all();
     const tagRows = db.prepare('SELECT post_id, tag_id FROM post_tags ORDER BY post_id, tag_id').all();
@@ -40,13 +43,31 @@ function createBackupApi(db) {
     }));
   }
 
+  function backupDeletedPosts() {
+    return db
+      .prepare(
+        `SELECT link, title, description, note, owner_name, owner_username, collection_name, tags, deleted_at
+         FROM deleted_posts ORDER BY id`
+      )
+      .all();
+  }
+
   function download() {
     const sections = db.prepare('SELECT id, name, created_at, updated_at FROM sections ORDER BY id').all();
     const collections = db
       .prepare('SELECT id, name, note, color, section_id, created_at, updated_at FROM collections ORDER BY id')
       .all();
     const tags = db.prepare('SELECT id, name, color, created_at, updated_at FROM tags ORDER BY id').all();
-    return { body: { schema_version: SCHEMA_VERSION, sections, collections, tags, posts: backupPosts() } };
+    return {
+      body: {
+        schema_version: SCHEMA_VERSION,
+        sections,
+        collections,
+        tags,
+        posts: backupPosts(),
+        deleted_posts: backupDeletedPosts(),
+      },
+    };
   }
 
   // Wipe-and-replace, but wrapped in one transaction: if any row in the
@@ -63,6 +84,21 @@ function createBackupApi(db) {
     const collectionsIn = requireArray(body.collections, 'collections');
     const tagsIn = requireArray(body.tags ?? [], 'tags');
     const postsIn = requireArray(body.posts, 'posts');
+    const deletedPostsIn = requireArray(body.deleted_posts ?? [], 'deleted_posts');
+
+    // issue #40: this restore's wipe is a hard delete of whatever Posts are
+    // currently live, same as the other hard-delete call sites -- except a
+    // link the incoming backup also restores isn't actually gone, so only
+    // truly-discarded links get tombstoned. Snapshotting must happen before
+    // the wipe below (it reads pre-restore Collections/Tags), but writing the
+    // rows happens after deleted_posts itself is restored, so these take
+    // precedence over the backup's own tombstones for any overlapping link.
+    const incomingLinks = new Set(postsIn.map((p) => p.link));
+    const discardedPosts = db
+      .prepare('SELECT * FROM posts')
+      .all()
+      .filter((p) => !incomingLinks.has(p.link));
+    const discardedTombstoneRows = tombstones.buildTombstoneRows(discardedPosts);
 
     db.exec('BEGIN');
     try {
@@ -71,6 +107,7 @@ function createBackupApi(db) {
       db.exec('DELETE FROM tags');
       db.exec('DELETE FROM collections');
       db.exec('DELETE FROM sections');
+      db.exec('DELETE FROM deleted_posts');
 
       // Sections first -- collections.section_id references them, and foreign
       // keys are enforced (db.js: PRAGMA foreign_keys = ON).
@@ -125,12 +162,37 @@ function createBackupApi(db) {
         }
       }
 
+      const insertDeletedPost = db.prepare(
+        `INSERT INTO deleted_posts
+          (link, title, description, note, owner_name, owner_username, collection_name, tags, deleted_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      );
+      for (const d of deletedPostsIn) {
+        insertDeletedPost.run(
+          d.link,
+          d.title ?? null,
+          d.description ?? null,
+          d.note ?? null,
+          d.owner_name ?? null,
+          d.owner_username ?? null,
+          d.collection_name ?? null,
+          d.tags ?? '[]',
+          d.deleted_at
+        );
+      }
+      tombstones.insertTombstoneRows(discardedTombstoneRows);
+
       db.exec('COMMIT');
     } catch (err) {
       db.exec('ROLLBACK');
       if (err instanceof HttpError) throw err;
       throw new HttpError(400, `Restore failed: ${err.message}`);
     }
+
+    // deleted_posts isn't a straight wipe-and-replace count -- this restore's
+    // own discarded-Post tombstones (discardedTombstoneRows) land on top of
+    // the backup's deletedPostsIn, so the actual row count can exceed either.
+    const deletedPostsCount = db.prepare('SELECT COUNT(*) AS c FROM deleted_posts').get().c;
 
     return {
       body: {
@@ -139,6 +201,7 @@ function createBackupApi(db) {
         collections: collectionsIn.length,
         tags: tagsIn.length,
         posts: postsIn.length,
+        deleted_posts: deletedPostsCount,
       },
     };
   }

@@ -49,3 +49,22 @@ CREATE TABLE IF NOT EXISTS post_tags (
   created_at INTEGER NOT NULL,
   PRIMARY KEY (post_id, tag_id)
 );
+
+-- issue #30/#40: a tombstone for a Post deleted in-app, so a later reimport
+-- can recognize it instead of treating it as brand new. One row per link --
+-- a later delete of the same link overwrites the previous tombstone.
+-- Collection/Tags are point-in-time snapshots (name string / denormalized
+-- JSON name array), not live references, so they survive the original
+-- Collection or Tags being renamed or deleted.
+CREATE TABLE IF NOT EXISTS deleted_posts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  link TEXT NOT NULL UNIQUE,
+  title TEXT,
+  description TEXT,
+  note TEXT,
+  owner_name TEXT,
+  owner_username TEXT,
+  collection_name TEXT,
+  tags TEXT,
+  deleted_at INTEGER NOT NULL
+);
