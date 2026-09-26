@@ -8,6 +8,181 @@
 
   const PALETTE = ['#B5533C','#4C6B8A','#6B7A4F','#B8863B','#7A5670','#3D6E8F','#9C5B8C','#5E7A9A','#A6763C','#4A7C6B','#8C6B47','#6E5B8C'];
 
+  // ---------------- PROTOTYPE #34 (throwaway branch prototype/bulk-select-issue-34) ----------------
+  // Explores 3 takes on bulk-select + bulk-assign(drag)/tag/delete for the post
+  // list, per the decision on #33. Fully inert unless ?bulkProto=A|B|C is in
+  // the URL -- with it absent, none of this code changes production behavior.
+  // No real mutations happen in ANY variant (see proto* functions) -- this is
+  // read-only exploration of the interaction model, not a working feature.
+  // Strip this whole thing (search "PROTOTYPE #34") once a variant wins and
+  // is folded into a real implementation on a proper branch.
+  const BULK_PROTO_VARIANTS = ['A', 'B', 'C'];
+  const BULK_PROTO_LABELS = { A: 'A (Checkbox mode)', B: 'B (Ambient click)', C: 'C (Header takeover)' };
+  let bulkProtoVariant = (typeof location !== 'undefined' ? new URLSearchParams(location.search).get('bulkProto') : null) || null;
+  if (bulkProtoVariant) bulkProtoVariant = bulkProtoVariant.toUpperCase();
+  if (!BULK_PROTO_VARIANTS.includes(bulkProtoVariant)) bulkProtoVariant = null;
+  let bulkSelection = new Set(); // post ids (string)
+  let bulkModeOn = false; // variants A/C only -- an explicit toggle; B is always "ambient" (no mode)
+
+  function isBulkProtoActive() { return bulkProtoVariant !== null; }
+  function isBulkSelected(id) { return bulkSelection.has(String(id)); }
+  function toggleBulkSelected(id) {
+    const key = String(id);
+    if (bulkSelection.has(key)) bulkSelection.delete(key); else bulkSelection.add(key);
+  }
+  function clearBulkSelection() { bulkSelection.clear(); }
+
+  // Persistence policy differs per variant on purpose (one of the 4 things
+  // this prototype is meant to let you react to): A resets hard on any nav
+  // change, B never auto-clears, C only clears on the axes that change the
+  // list's identity (grouping/collection), not search/sort.
+  function protoOnNavigationChange(reason) {
+    if (!isBulkProtoActive() || bulkProtoVariant === 'B') return;
+    if (bulkProtoVariant === 'A') { clearBulkSelection(); bulkModeOn = false; return; }
+    if (bulkProtoVariant === 'C' && (reason === 'groupByTag' || reason === 'view')) clearBulkSelection();
+  }
+
+  function protoUpdateLabel() {
+    const el = document.getElementById('protoLabel');
+    if (el) el.textContent = BULK_PROTO_LABELS[bulkProtoVariant] || '';
+  }
+  function protoSetVariant(v) {
+    const params = new URLSearchParams(location.search);
+    params.set('bulkProto', v);
+    history.replaceState(null, '', '?' + params.toString());
+    bulkProtoVariant = v;
+    bulkModeOn = false;
+    clearBulkSelection();
+    protoUpdateLabel();
+    render();
+  }
+  function protoCycle(dir) {
+    const idx = BULK_PROTO_VARIANTS.indexOf(bulkProtoVariant);
+    protoSetVariant(BULK_PROTO_VARIANTS[(idx + dir + BULK_PROTO_VARIANTS.length) % BULK_PROTO_VARIANTS.length]);
+  }
+  function initBulkProtoChrome() {
+    if (!isBulkProtoActive()) return;
+    document.getElementById('protoBanner').classList.remove('hidden');
+    document.getElementById('protoSwitcher').classList.remove('hidden');
+    protoUpdateLabel();
+    document.getElementById('protoPrev').addEventListener('click', () => protoCycle(-1));
+    document.getElementById('protoNext').addEventListener('click', () => protoCycle(1));
+    document.addEventListener('keydown', (e) => {
+      const tag = (e.target.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || e.target.isContentEditable) return;
+      if (e.key === 'ArrowLeft') protoCycle(-1);
+      if (e.key === 'ArrowRight') protoCycle(1);
+    });
+  }
+
+  function protoToolbarC() {
+    const n = bulkSelection.size;
+    return `<div class="va-topbar proto-toolbar">
+      <button type="button" class="btn-ghost" data-proto-action="exit">← Done</button>
+      <span>${n} selected</span>
+      <button type="button" class="btn-ghost" data-proto-action="select-all">Select all in view</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn-ghost" data-proto-action="tag">Attach tag…</button>
+      <button type="button" class="btn-primary" data-proto-action="delete">Delete</button>
+    </div>`;
+  }
+  function protoToolbarHtml() {
+    if (!isBulkProtoActive()) return '';
+    const n = bulkSelection.size;
+    if (bulkProtoVariant === 'A') {
+      if (!bulkModeOn) return '';
+      return `<div class="proto-toolbar" style="position:fixed; bottom:70px; left:50%; transform:translateX(-50%); box-shadow:0 10px 30px rgba(0,0,0,.15); z-index:150;">
+        <span>${n} selected</span>
+        <span class="spacer"></span>
+        <button type="button" class="btn-ghost" data-proto-action="tag">Attach tag…</button>
+        <button type="button" class="btn-ghost" data-proto-action="delete">Delete</button>
+        <button type="button" class="btn-ghost" data-proto-action="exit">Done</button>
+      </div>`;
+    }
+    if (bulkProtoVariant === 'B') {
+      if (n === 0) return '';
+      return `<div class="proto-toolbar">
+        <span>${n} selected — drag any selected card to move just that one card</span>
+        <span class="spacer"></span>
+        <button type="button" class="btn-ghost" data-proto-action="tag">Attach tag…</button>
+        <button type="button" class="btn-ghost" data-proto-action="delete">Delete</button>
+        <button type="button" class="btn-ghost" data-proto-action="clear">✕ Clear</button>
+      </div>`;
+    }
+    return ''; // C's toolbar replaces the topbar itself, see protoToolbarC()
+  }
+  function protoStubDelete() {
+    const n = bulkSelection.size;
+    if (n === 0) return;
+    confirmAction(
+      `Delete ${n} post${n === 1 ? '' : 's'}?`,
+      'PROTOTYPE — nothing is actually deleted.',
+      () => {
+        showToast(`PROTOTYPE: would delete ${n} post${n === 1 ? '' : 's'} (stub, no real change)`);
+        clearBulkSelection();
+        if (bulkProtoVariant !== 'B') bulkModeOn = false;
+        render();
+      }
+    );
+  }
+  function protoStubTagPicker() {
+    const n = bulkSelection.size;
+    if (n === 0) { showToast('Select posts first'); return; }
+    const name = window.prompt(`PROTOTYPE: type a tag name to "attach" to ${n} selected post(s) — nothing is really saved.`);
+    if (!name) return;
+    showToast(`PROTOTYPE: would attach "${name}" to ${n} post${n === 1 ? '' : 's'} (stub, no real change)`);
+  }
+  function attachBulkProtoHandlers() {
+    if (!isBulkProtoActive()) return;
+    const app = document.getElementById('app');
+
+    app.querySelectorAll('.va-card').forEach((card) => {
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('[data-proto-checkbox]') || e.target.closest('[data-action="delete"]') || e.target.closest('a')) return;
+        const id = card.dataset.id;
+        if (bulkProtoVariant === 'B') {
+          if (e.shiftKey || e.ctrlKey || e.metaKey) {
+            e.stopImmediatePropagation(); e.preventDefault();
+            toggleBulkSelected(id); render();
+          }
+          return;
+        }
+        if (bulkModeOn) {
+          e.stopImmediatePropagation(); e.preventDefault();
+          toggleBulkSelected(id); render();
+        }
+      }, true); // capture: must run before attachHandlers' own open-detail listener on the same element
+      card.addEventListener('dragstart', (e) => {
+        const id = String(card.dataset.id);
+        if ((bulkProtoVariant === 'A' || bulkProtoVariant === 'C') && bulkSelection.has(id) && bulkSelection.size > 1) {
+          e.dataTransfer.setData('text/plain', JSON.stringify([...bulkSelection]));
+        }
+      });
+    });
+
+    app.querySelectorAll('[data-proto-checkbox]').forEach((cb) => {
+      cb.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleBulkSelected(cb.dataset.protoCheckbox);
+        render();
+      });
+    });
+
+    app.querySelectorAll('[data-proto-action]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const action = btn.dataset.protoAction;
+        if (action === 'enter') { bulkModeOn = true; render(); }
+        else if (action === 'exit') { bulkModeOn = false; clearBulkSelection(); render(); }
+        else if (action === 'clear') { clearBulkSelection(); render(); }
+        else if (action === 'select-all') { posts.forEach((p) => bulkSelection.add(String(p.id))); render(); }
+        else if (action === 'delete') { protoStubDelete(); }
+        else if (action === 'tag') { protoStubTagPicker(); }
+      });
+    });
+  }
+  // ---------------- end PROTOTYPE #34 ----------------
+
   // ---------------- pure helpers (unit-tested from Node, see test/frontend/helpers.test.js) ----------------
 
   // Mirrors the server's title-default heuristic (src/api/posts.js) so the UI can
@@ -390,11 +565,16 @@
         </div>
       </div>`;
 
-    const topbar = `
+    // PROTOTYPE #34: variant C replaces the whole topbar with its own toolbar
+    // while bulk mode is on, instead of adding a button/bar alongside it.
+    const protoEnterBtn = (bulkProtoVariant === 'A' || bulkProtoVariant === 'C')
+      ? `<button type="button" class="btn-ghost" data-proto-action="enter">☑ Select posts</button>` : '';
+    const topbar = (bulkProtoVariant === 'C' && bulkModeOn) ? protoToolbarC() : `
       <div class="va-topbar">
         <input type="text" class="search" id="searchInput" placeholder="Search title, description, notes…" value="${escapeHtml(state.search)}">
         ${sortSelectHtml()}
         <div class="spacer"></div>
+        ${protoEnterBtn}
         <button class="btn-ghost ${state.groupByTag ? 'active' : ''}" id="groupByTagBtn">Group by tag</button>
         ${dataMenuHtml()}
         <button class="btn-primary" id="addPostBtn">+ Add a link</button>
@@ -444,9 +624,10 @@
         ? renderGroupedByTag(list)
         : `<div class="va-grid">${list.map(renderPostCard).join('')}</div>`;
     const topBlock = `<div class="va-sticky-top">${topbar}${headerBlock}</div>`;
+    const protoToolbar = protoToolbarHtml(); // PROTOTYPE #34: '' unless A(mode on) or B(selection>0)
     const gridArea = detailOpen
-      ? `<div class="va-content-row">${renderDetailPanel()}<div class="va-grid-wrap">${grid}</div></div>`
-      : grid;
+      ? `<div class="va-content-row">${renderDetailPanel()}<div class="va-grid-wrap">${protoToolbar}${grid}</div></div>`
+      : `${protoToolbar}${grid}`;
 
     return `<div class="va-shell">${nav}<div class="va-main">${topBlock}${collHeaderBlock}${gridArea}</div></div>`;
   }
@@ -536,8 +717,15 @@
     const descHtml = p.description ? `<div class="post-desc">${escapeHtml(p.description)}</div>` : `<div class="post-desc note-placeholder">No description yet.</div>`;
     const topBorder = c ? `border-top:4px solid ${c.color};` : '';
     const selected = state.detailMode !== null && sameId(state.detailMode, p.id) ? 'selected' : '';
+    // PROTOTYPE #34: variant B is ambient shift/ctrl-click only (no checkbox);
+    // A/C show a checkbox once their explicit bulk mode is on.
+    const protoSelected = isBulkProtoActive() && isBulkSelected(p.id) ? 'proto-selected' : '';
+    const protoCheckbox = isBulkProtoActive() && bulkProtoVariant !== 'B' && bulkModeOn
+      ? `<input type="checkbox" class="proto-card-checkbox" data-proto-checkbox="${p.id}" ${isBulkSelected(p.id) ? 'checked' : ''}>`
+      : '';
     return `
-      <div class="va-card ${!p.collection_id ? 'unsorted' : ''} ${selected}" draggable="true" data-id="${p.id}" style="${topBorder}">
+      <div class="va-card ${!p.collection_id ? 'unsorted' : ''} ${selected} ${protoSelected}" draggable="true" data-id="${p.id}" style="${topBorder}">
+        ${protoCheckbox}
         <div class="va-card-top">
           ${chip}
           <button class="icon-btn" data-action="delete" data-id="${p.id}" title="Delete">✕</button>
@@ -636,6 +824,7 @@
     const app = $('#app');
     app.innerHTML = renderShell();
     attachHandlers();
+    attachBulkProtoHandlers(); // PROTOTYPE #34 -- no-op unless ?bulkProto= is set
     syncDetailPanelStickyOffset();
   }
   function syncDetailPanelStickyOffset() {
@@ -651,6 +840,7 @@
 
   const debouncedSearch = debounce(async (value, caret) => {
     state.search = value;
+    protoOnNavigationChange('search'); // PROTOTYPE #34
     await loadPosts();
     render();
     const el = $('#searchInput');
@@ -672,6 +862,7 @@
       el.addEventListener('click', async () => {
         await closeDetailPanel();
         state.view = el.dataset.view;
+        protoOnNavigationChange('view'); // PROTOTYPE #34
         await loadPosts();
         render();
       });
@@ -683,6 +874,7 @@
     const sortSelect = $('#sortSelect');
     if (sortSelect) sortSelect.addEventListener('change', async (e) => {
       state.sort = e.target.value;
+      protoOnNavigationChange('sort'); // PROTOTYPE #34
       await loadPosts();
       render();
     });
@@ -835,8 +1027,23 @@
       item.addEventListener('drop', async (e) => {
         e.preventDefault();
         item.classList.remove('drop-target');
-        const postId = e.dataTransfer.getData('text/plain');
+        const raw = e.dataTransfer.getData('text/plain');
         const newCollectionId = view === 'unsorted' ? null : collectionIdFromView(view);
+
+        // PROTOTYPE #34: stub every drop while a variant is active -- no real
+        // mutation, whether it's a single card or a whole-selection drag.
+        if (isBulkProtoActive()) {
+          let ids = [raw];
+          try { const parsed = JSON.parse(raw); if (Array.isArray(parsed)) ids = parsed; } catch { /* single id, not JSON */ }
+          const collName = newCollectionId ? (getCollection(newCollectionId)?.name || '') : 'To sort';
+          showToast(`PROTOTYPE: would move ${ids.length} post${ids.length === 1 ? '' : 's'} to ${collName} (stub, no real change)`);
+          if (bulkProtoVariant !== 'B') bulkModeOn = false;
+          clearBulkSelection();
+          render();
+          return;
+        }
+
+        const postId = raw;
         try {
           const updated = await apiPatch(`/api/posts/${postId}`, { collection_id: newCollectionId });
           if (activePost && sameId(activePost.id, postId)) activePost = updated;
@@ -848,7 +1055,7 @@
     });
 
     const groupByTagBtn = $('#groupByTagBtn');
-    if (groupByTagBtn) groupByTagBtn.addEventListener('click', () => { state.groupByTag = !state.groupByTag; render(); });
+    if (groupByTagBtn) groupByTagBtn.addEventListener('click', () => { state.groupByTag = !state.groupByTag; protoOnNavigationChange('groupByTag'); render(); });
 
     const detailClose = $('#detailClose'); if (detailClose) detailClose.addEventListener('click', async () => { await closeDetailPanel(); await refreshAfterMutation(); });
     const detailDone = $('#detailDone'); if (detailDone) detailDone.addEventListener('click', async () => { await closeDetailPanel(); await refreshAfterMutation(); });
@@ -1451,6 +1658,7 @@
     bindImportInputHandlers();
     bindRestoreInputHandlers();
     bindGlobalKeydown();
+    initBulkProtoChrome(); // PROTOTYPE #34 -- no-op unless ?bulkProto= is set
     init();
   }
 
