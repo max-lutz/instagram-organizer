@@ -25,6 +25,21 @@ function createCollectionsApi(db) {
     return collection;
   }
 
+  function requireSectionExists(id) {
+    const section = db.prepare('SELECT id FROM sections WHERE id = ?').get(id);
+    if (!section) throw new HttpError(400, 'Section not found');
+  }
+
+  // Shared by create/update: undefined means "leave unchanged" (update only),
+  // null clears it, anything else must be an existing Section's id.
+  function resolveSectionId(value, existing) {
+    if (value === undefined) return existing;
+    if (value === null) return null;
+    const id = parseId(value, 'section_id');
+    requireSectionExists(id);
+    return id;
+  }
+
   // Response-shaped variant: includes post_count so clients (e.g. the
   // sidebar) don't need a second request per collection just for a badge.
   function getCollectionOr404(id) {
@@ -58,15 +73,16 @@ function createCollectionsApi(db) {
     const name = requireString(body.name, 'name');
     const color = requireString(body.color, 'color');
     const note = typeof body.note === 'string' ? body.note : null;
+    const sectionId = resolveSectionId(body.section_id, null);
     const now = Date.now();
 
     let id;
     try {
       const result = db
         .prepare(
-          'INSERT INTO collections (name, note, color, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
+          'INSERT INTO collections (name, note, color, section_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
         )
-        .run(name, note, color, now, now);
+        .run(name, note, color, sectionId, now, now);
       id = result.lastInsertRowid;
     } catch (err) {
       if (isUniqueViolation(err)) throw new HttpError(409, 'A collection with that name already exists');
@@ -85,13 +101,15 @@ function createCollectionsApi(db) {
     const name = body.name !== undefined ? requireString(body.name, 'name') : existing.name;
     const color = body.color !== undefined ? requireString(body.color, 'color') : existing.color;
     const note = body.note !== undefined ? (body.note === null ? null : String(body.note)) : existing.note;
+    const sectionId = resolveSectionId(body.section_id, existing.section_id);
     const now = Date.now();
 
     try {
-      db.prepare('UPDATE collections SET name = ?, note = ?, color = ?, updated_at = ? WHERE id = ?').run(
+      db.prepare('UPDATE collections SET name = ?, note = ?, color = ?, section_id = ?, updated_at = ? WHERE id = ?').run(
         name,
         note,
         color,
+        sectionId,
         now,
         existing.id
       );

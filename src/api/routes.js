@@ -1,12 +1,14 @@
 // The API's route table: wires each resource module's handlers to a method + path.
 const { createApiHandler } = require('./router');
 const { createCollectionsApi } = require('./collections');
+const { createSectionsApi } = require('./sections');
 const { createTagsApi } = require('./tags');
 const { createPostsApi } = require('./posts');
 const { createBackupApi } = require('./backup');
 
 function createApiHandlerForDb(db) {
   const collections = createCollectionsApi(db);
+  const sections = createSectionsApi(db);
   const tags = createTagsApi(db);
   const posts = createPostsApi(db);
   const backup = createBackupApi(db);
@@ -17,6 +19,11 @@ function createApiHandlerForDb(db) {
     { method: 'GET', path: '/api/collections/:id', handler: collections.get },
     { method: 'PATCH', path: '/api/collections/:id', handler: collections.update },
     { method: 'DELETE', path: '/api/collections/:id', handler: collections.remove },
+
+    { method: 'GET', path: '/api/sections', handler: sections.list },
+    { method: 'POST', path: '/api/sections', handler: sections.create },
+    { method: 'PATCH', path: '/api/sections/:id', handler: sections.update },
+    { method: 'DELETE', path: '/api/sections/:id', handler: sections.remove },
 
     { method: 'GET', path: '/api/tags', handler: tags.list },
     { method: 'POST', path: '/api/tags', handler: tags.create },
