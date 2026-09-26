@@ -2,6 +2,7 @@
 // deletion (ADR 0001). Route shape was this ticket's (issue #12) to decide.
 const { HttpError } = require('./http-error');
 const { parseId } = require('./params');
+const { createTombstones } = require('./tombstones');
 
 // node:sqlite throws a plain Error with no typed constraint-violation class,
 // so we detect UNIQUE conflicts (collection name is UNIQUE COLLATE NOCASE) by message.
@@ -17,6 +18,8 @@ function requireString(value, field) {
 }
 
 function createCollectionsApi(db) {
+  const tombstones = createTombstones(db);
+
   // Bare row, no post_count join -- used internally where callers only need
   // the collection's own columns (e.g. as defaults when applying a PATCH).
   function getCollectionRowOr404(id) {
@@ -133,6 +136,8 @@ function createCollectionsApi(db) {
     db.exec('BEGIN');
     try {
       if (deletePosts) {
+        const posts = db.prepare('SELECT * FROM posts WHERE collection_id = ?').all(existing.id);
+        tombstones.tombstonePosts(posts);
         postsDeleted = db.prepare('DELETE FROM posts WHERE collection_id = ?').run(existing.id).changes;
       }
       db.prepare('DELETE FROM collections WHERE id = ?').run(existing.id);

@@ -3,6 +3,7 @@
 // (issue #12) to decide.
 const { HttpError } = require('./http-error');
 const { parseId } = require('./params');
+const { createTombstones } = require('./tombstones');
 
 const PROVENANCE_VALUES = ['manual', 'bulk-paste', 'instagram-import'];
 // CONTEXT.md: "a Post can carry up to 4 [Tags]." App-level only -- not enforced by the schema.
@@ -52,6 +53,8 @@ function sortClause(sort) {
 }
 
 function createPostsApi(db) {
+  const tombstones = createTombstones(db);
+
   function getPostRowOr404(id) {
     const post = db.prepare('SELECT * FROM posts WHERE id = ?').get(id);
     if (!post) throw new HttpError(404, 'Post not found');
@@ -174,6 +177,10 @@ function createPostsApi(db) {
       throw err;
     }
 
+    // #30's invariant: a tombstone only exists for a link that isn't
+    // currently live, so a manual re-add clears any prior tombstone for it.
+    tombstones.clearTombstone(link);
+
     return { status: 201, body: getPostOr404(id) };
   }
 
@@ -228,6 +235,7 @@ function createPostsApi(db) {
 
   function remove({ params }) {
     const existing = getPostRowOr404(parseId(params.id));
+    tombstones.tombstonePosts([existing]);
     db.prepare('DELETE FROM posts WHERE id = ?').run(existing.id);
     return { body: { deleted: true } };
   }

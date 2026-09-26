@@ -33,6 +33,7 @@ test('backup download + restore', async (t) => {
     assert.equal(backedUpPost.owner_name, 'Chef');
     assert.equal(backedUpPost.owner_username, 'chef_handle');
     assert.deepEqual(backedUpPost.tag_ids, [tag.body.id]);
+    assert.deepEqual(backup.body.deleted_posts, []);
   });
 
   await t.test('restore rejects an unsupported schema_version', async () => {
@@ -76,7 +77,15 @@ test('backup download + restore', async (t) => {
 
     const res = await call('POST', '/api/backup/restore', payload);
     assert.equal(res.status, 200);
-    assert.deepEqual(res.body, { restored: true, sections: 0, collections: 1, tags: 1, posts: 1 });
+    assert.equal(res.body.restored, true);
+    assert.equal(res.body.sections, 0);
+    assert.equal(res.body.collections, 1);
+    assert.equal(res.body.tags, 1);
+    assert.equal(res.body.posts, 1);
+    // Every pre-restore live post whose link isn't in the incoming payload
+    // (here: 'stale', plus any left over from earlier subtests) is truly
+    // discarded by the wipe and gets tombstoned (issue #40).
+    assert.ok(res.body.deleted_posts >= 1);
 
     const collections = await call('GET', '/api/collections');
     assert.equal(collections.body.length, 1);
@@ -93,6 +102,11 @@ test('backup download + restore', async (t) => {
     const tags = await call('GET', '/api/tags');
     assert.equal(tags.body.length, 1);
     assert.equal(tags.body[0].id, 60);
+
+    const stale = server.db.prepare('SELECT * FROM deleted_posts WHERE link = ?').get('https://instagram.com/p/stale');
+    assert.ok(stale);
+    assert.equal(stale.collection_name, null);
+    assert.deepEqual(JSON.parse(stale.tags), []);
   });
 
   await t.test('sections round-trip through backup/restore', async () => {
@@ -120,6 +134,26 @@ test('backup download + restore', async (t) => {
     const collections = await call('GET', '/api/collections');
     const restoredColl = collections.body.find((c) => c.id === coll.body.id);
     assert.equal(restoredColl.section_id, section.body.id);
+  });
+
+  await t.test('deleted_posts round-trips through backup/restore (issue #40)', async () => {
+    server.db.exec('DELETE FROM deleted_posts');
+    const post = await call('POST', '/api/posts', { link: 'https://instagram.com/p/tomb-a', provenance: 'manual' });
+    await call('DELETE', `/api/posts/${post.body.id}`);
+
+    const backup = await call('GET', '/api/backup');
+    const tombstone = backup.body.deleted_posts.find((d) => d.link === 'https://instagram.com/p/tomb-a');
+    assert.ok(tombstone);
+    assert.equal(tombstone.collection_name, null);
+    assert.deepEqual(JSON.parse(tombstone.tags), []);
+
+    // Restoring that same backup must keep the tombstone, even though it
+    // references no live post.
+    const restored = await call('POST', '/api/backup/restore', backup.body);
+    assert.equal(restored.status, 200);
+
+    const after = await call('GET', '/api/backup');
+    assert.ok(after.body.deleted_posts.some((d) => d.link === 'https://instagram.com/p/tomb-a'));
   });
 
   await t.test('restore round-trips a downloaded backup', async () => {

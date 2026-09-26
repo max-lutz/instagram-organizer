@@ -204,4 +204,37 @@ test('posts CRUD, title derivation, search/sort, tags', async (t) => {
     const got = await call('GET', `/api/posts/${post.body.id}`);
     assert.equal(got.status, 404);
   });
+
+  await t.test('delete tombstones the post, and re-adding the link clears it (issue #40)', async () => {
+    const coll = await call('POST', '/api/collections', { name: 'Tombstoned', color: '#888888' });
+    const tag = await call('POST', '/api/tags', { name: 'ephemeral', color: '#999999' });
+    const link = 'https://instagram.com/p/tombstone-roundtrip';
+    const post = await call('POST', '/api/posts', {
+      link,
+      provenance: 'manual',
+      collection_id: coll.body.id,
+      description: 'Here today.',
+      note: 'a note',
+      owner_name: 'Someone',
+      owner_username: 'someone_handle',
+    });
+    await call('POST', `/api/posts/${post.body.id}/tags`, { tag_id: tag.body.id });
+
+    await call('DELETE', `/api/posts/${post.body.id}`);
+
+    const tombstone = server.db.prepare('SELECT * FROM deleted_posts WHERE link = ?').get(link);
+    assert.ok(tombstone);
+    assert.equal(tombstone.description, 'Here today.');
+    assert.equal(tombstone.note, 'a note');
+    assert.equal(tombstone.owner_name, 'Someone');
+    assert.equal(tombstone.owner_username, 'someone_handle');
+    assert.equal(tombstone.collection_name, 'Tombstoned');
+    assert.deepEqual(JSON.parse(tombstone.tags), ['ephemeral']);
+
+    // Manual re-add clears the tombstone (#30's invariant).
+    const readded = await call('POST', '/api/posts', { link, provenance: 'manual' });
+    assert.equal(readded.status, 201);
+    const cleared = server.db.prepare('SELECT * FROM deleted_posts WHERE link = ?').get(link);
+    assert.equal(cleared, undefined);
+  });
 });
