@@ -5,9 +5,10 @@
 const { HttpError } = require('./http-error');
 const { createTombstones } = require('./tombstones');
 
-// Bumped from 4 to 5 to add deleted_posts (issue #40), which would otherwise
-// be lost on a restore.
-const SCHEMA_VERSION = 5;
+// Bumped from 5 to 6 to add posts.reimport_dismissed and
+// deleted_posts.dismissed (issue #41), which would otherwise be lost on a
+// restore.
+const SCHEMA_VERSION = 6;
 
 function requireArray(value, field) {
   if (!Array.isArray(value)) throw new HttpError(400, `${field} must be an array`);
@@ -37,6 +38,7 @@ function createBackupApi(db) {
       owner_username: p.owner_username,
       source: p.source,
       provenance: p.provenance,
+      reimport_dismissed: p.reimport_dismissed,
       created_at: p.created_at,
       updated_at: p.updated_at,
       tag_ids: tagIdsByPost.get(p.id) || [],
@@ -46,7 +48,7 @@ function createBackupApi(db) {
   function backupDeletedPosts() {
     return db
       .prepare(
-        `SELECT link, title, description, note, owner_name, owner_username, collection_name, tags, deleted_at
+        `SELECT link, title, description, note, owner_name, owner_username, collection_name, tags, deleted_at, dismissed
          FROM deleted_posts ORDER BY id`
       )
       .all();
@@ -134,8 +136,8 @@ function createBackupApi(db) {
 
       const insertPost = db.prepare(
         `INSERT INTO posts
-          (id, link, collection_id, title, title_manual, description, note, owner_name, owner_username, source, provenance, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          (id, link, collection_id, title, title_manual, description, note, owner_name, owner_username, source, provenance, reimport_dismissed, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       );
       // Backup posts carry each attached tag as a bare id (tag_ids), not a
       // per-attachment timestamp, so post_tags.created_at is stamped fresh here.
@@ -154,6 +156,7 @@ function createBackupApi(db) {
           p.owner_username ?? null,
           p.source || 'instagram',
           p.provenance,
+          p.reimport_dismissed ? 1 : 0,
           p.created_at,
           p.updated_at
         );
@@ -164,8 +167,8 @@ function createBackupApi(db) {
 
       const insertDeletedPost = db.prepare(
         `INSERT INTO deleted_posts
-          (link, title, description, note, owner_name, owner_username, collection_name, tags, deleted_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          (link, title, description, note, owner_name, owner_username, collection_name, tags, deleted_at, dismissed)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       );
       for (const d of deletedPostsIn) {
         insertDeletedPost.run(
@@ -177,7 +180,8 @@ function createBackupApi(db) {
           d.owner_username ?? null,
           d.collection_name ?? null,
           d.tags ?? '[]',
-          d.deleted_at
+          d.deleted_at,
+          d.dismissed ? 1 : 0
         );
       }
       tombstones.insertTombstoneRows(discardedTombstoneRows);

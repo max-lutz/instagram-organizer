@@ -3,7 +3,14 @@
 // covered here; see issue #13's resolution comment for how that was verified.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { firstSentence, parseInstagramLink, buildPostsQuery, isVideoLink, parseInstagramExport } = require('../../public/app.js');
+const {
+  firstSentence,
+  parseInstagramLink,
+  buildPostsQuery,
+  isVideoLink,
+  parseInstagramExport,
+  computeReimportDiff,
+} = require('../../public/app.js');
 
 test('firstSentence mirrors the server title-derivation heuristic', () => {
   assert.equal(firstSentence('Sheet-pan chicken thighs with lemon. Great for a weeknight.'), 'Sheet-pan chicken thighs with lemon.');
@@ -122,4 +129,51 @@ test('parseInstagramExport trims whitespace from the collection name', () => {
 
 test('parseInstagramExport returns an empty array for a file with no recognizable posts', () => {
   assert.deepEqual(parseInstagramExport('<html><body>not an export</body></html>'), []);
+});
+
+// issue #31/#41's reimport diff.
+test('computeReimportDiff finds direction (a) re-add candidates: export links with a live tombstone', () => {
+  const parsed = [
+    { link: 'https://instagram.com/p/a', description: '', ownerName: '', ownerUsername: '', collectionName: '' },
+    { link: 'https://instagram.com/p/b', description: '', ownerName: '', ownerUsername: '', collectionName: '' },
+  ];
+  const existingPosts = [];
+  const deletedPosts = [
+    { id: 1, link: 'https://instagram.com/p/a', dismissed: 0 },
+    { id: 2, link: 'https://instagram.com/p/missing', dismissed: 0 },
+  ];
+
+  const { readdCandidates, dropCandidates, tombstoneByLink } = computeReimportDiff(parsed, existingPosts, deletedPosts);
+  assert.equal(readdCandidates.length, 1);
+  assert.equal(readdCandidates[0].exportPost.link, 'https://instagram.com/p/a');
+  assert.equal(readdCandidates[0].tombstone.id, 1);
+  assert.deepEqual(dropCandidates, []);
+  assert.equal(tombstoneByLink.has('https://instagram.com/p/a'), true);
+  assert.equal(tombstoneByLink.has('https://instagram.com/p/b'), false);
+});
+
+// Regression test: a dismissed tombstone must NOT surface in the review
+// screen, but its link must still be kept out of performImport's normal add
+// loop (via tombstoneByLink) -- otherwise "dismissed" silently re-adds the
+// Post as brand new on the very next reimport instead of leaving it deleted.
+test('computeReimportDiff excludes dismissed tombstones from readdCandidates but keeps them in tombstoneByLink', () => {
+  const parsed = [{ link: 'https://instagram.com/p/a', description: '', ownerName: '', ownerUsername: '', collectionName: '' }];
+  const deletedPosts = [{ id: 1, link: 'https://instagram.com/p/a', dismissed: 1 }];
+
+  const { readdCandidates, tombstoneByLink } = computeReimportDiff(parsed, [], deletedPosts);
+  assert.deepEqual(readdCandidates, []);
+  assert.equal(tombstoneByLink.has('https://instagram.com/p/a'), true);
+});
+
+test('computeReimportDiff finds direction (b) drop candidates: live instagram-import posts missing from the export', () => {
+  const parsed = [{ link: 'https://instagram.com/p/still-here', description: '', ownerName: '', ownerUsername: '', collectionName: '' }];
+  const existingPosts = [
+    { id: 10, link: 'https://instagram.com/p/still-here', provenance: 'instagram-import', reimport_dismissed: 0 },
+    { id: 11, link: 'https://instagram.com/p/gone', provenance: 'instagram-import', reimport_dismissed: 0 },
+    { id: 12, link: 'https://instagram.com/p/manual-gone', provenance: 'manual', reimport_dismissed: 0 },
+    { id: 13, link: 'https://instagram.com/p/dismissed-gone', provenance: 'instagram-import', reimport_dismissed: 1 },
+  ];
+
+  const { dropCandidates } = computeReimportDiff(parsed, existingPosts, []);
+  assert.deepEqual(dropCandidates.map((p) => p.id), [11]);
 });

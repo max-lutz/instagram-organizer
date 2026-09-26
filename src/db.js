@@ -19,12 +19,28 @@ function migrateCollectionsSectionId(db) {
   }
 }
 
+// issue #31/#41's "don't ask again" columns, added to two tables that
+// already existed before deleted_posts.dismissed / posts.reimport_dismissed
+// were decided -- same ALTER-if-missing shape as migrateCollectionsSectionId.
+function migrateReimportDismissedColumns(db) {
+  const postsColumns = db.prepare('PRAGMA table_info(posts)').all();
+  if (!postsColumns.some((c) => c.name === 'reimport_dismissed')) {
+    db.exec('ALTER TABLE posts ADD COLUMN reimport_dismissed INTEGER NOT NULL DEFAULT 0');
+  }
+
+  const deletedPostsColumns = db.prepare('PRAGMA table_info(deleted_posts)').all();
+  if (!deletedPostsColumns.some((c) => c.name === 'dismissed')) {
+    db.exec('ALTER TABLE deleted_posts ADD COLUMN dismissed INTEGER NOT NULL DEFAULT 0');
+  }
+}
+
 function openDb(dbPath = DB_PATH) {
   if (dbPath === DB_PATH) fs.mkdirSync(DATA_DIR, { recursive: true });
   const db = new DatabaseSync(dbPath);
   db.exec('PRAGMA foreign_keys = ON');
   db.exec(fs.readFileSync(SCHEMA_PATH, 'utf8'));
   migrateCollectionsSectionId(db);
+  migrateReimportDismissedColumns(db);
   db.exec('CREATE INDEX IF NOT EXISTS idx_collections_section_id ON collections(section_id)');
   return db;
 }

@@ -5,6 +5,7 @@ const { createSectionsApi } = require('./sections');
 const { createTagsApi } = require('./tags');
 const { createPostsApi } = require('./posts');
 const { createBackupApi } = require('./backup');
+const { createDeletedPostsApi } = require('./deleted-posts');
 
 function createApiHandlerForDb(db) {
   const collections = createCollectionsApi(db);
@@ -12,6 +13,7 @@ function createApiHandlerForDb(db) {
   const tags = createTagsApi(db);
   const posts = createPostsApi(db);
   const backup = createBackupApi(db);
+  const deletedPosts = createDeletedPostsApi(db);
 
   const routes = [
     { method: 'GET', path: '/api/collections', handler: collections.list },
@@ -42,6 +44,9 @@ function createApiHandlerForDb(db) {
 
     { method: 'GET', path: '/api/backup', handler: backup.download },
     { method: 'POST', path: '/api/backup/restore', handler: backup.restore },
+
+    { method: 'GET', path: '/api/deleted-posts', handler: deletedPosts.list },
+    { method: 'PATCH', path: '/api/deleted-posts/:id', handler: deletedPosts.update },
   ];
 
   return createApiHandler(routes);

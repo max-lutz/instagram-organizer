@@ -79,6 +79,21 @@
   </div>
 </div>
 
+<!-- Reimport diff review (issue #31/#41): batched Re-add/Skip + Keep/Drop choices -->
+<div class="overlay hidden" id="reimportReviewOverlay">
+  <div class="modal" style="max-width:560px;">
+    <h2>Review reimport changes</h2>
+    <p style="font-size:13px; color:var(--text-soft); margin-top:-8px;">
+      These posts changed since your last import.
+    </p>
+    <div id="reimportReviewList" class="reimport-review-list"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn-ghost" id="reimportReviewCancel">Close</button>
+      <button type="button" class="btn-primary" id="reimportReviewApply">Apply</button>
+    </div>
+  </div>
+</div>
+
 <input type="file" id="importFileInput" class="hidden" accept=".html,.htm,text/html">
 <input type="file" id="restoreFileInput" class="hidden" accept="application/json,.json">
 

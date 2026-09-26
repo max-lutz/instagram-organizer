@@ -237,4 +237,21 @@ test('posts CRUD, title derivation, search/sort, tags', async (t) => {
     const cleared = server.db.prepare('SELECT * FROM deleted_posts WHERE link = ?').get(link);
     assert.equal(cleared, undefined);
   });
+
+  await t.test('reimport_dismissed defaults to 0 and can be set via PATCH (issue #31/#41)', async () => {
+    const post = await call('POST', '/api/posts', {
+      link: 'https://instagram.com/p/reimport-dismiss',
+      provenance: 'instagram-import',
+    });
+    assert.equal(post.body.reimport_dismissed, 0);
+
+    const dismissed = await call('PATCH', `/api/posts/${post.body.id}`, { reimport_dismissed: true });
+    assert.equal(dismissed.status, 200);
+    assert.equal(dismissed.body.reimport_dismissed, 1);
+
+    // Unrelated fields are unaffected by the dismiss.
+    const undismissed = await call('PATCH', `/api/posts/${post.body.id}`, { note: 'still here', reimport_dismissed: false });
+    assert.equal(undismissed.body.reimport_dismissed, 0);
+    assert.equal(undismissed.body.note, 'still here');
+  });
 });
