@@ -98,6 +98,21 @@ select.sort{
 .va-nav-sep{height:1px; background:var(--border-soft); margin:6px 4px;}
 .va-nav-label{font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-faint); padding:0 9px; margin-top:4px;}
 
+.va-section{margin-top:10px;}
+.va-section-header{display:flex; align-items:center; gap:2px;}
+.va-section-toggle{
+  display:flex; align-items:center; gap:6px; flex:1; min-width:0; padding:6px 9px; border-radius:7px;
+  font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-faint); background:none; border:none; text-align:left;
+}
+.va-section-toggle:hover{background:var(--surface-sunken); color:var(--text-soft);}
+.va-section-toggle .va-section-name{flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-transform:none; letter-spacing:normal; font-size:11.5px; font-weight:700;}
+.va-section-toggle .count{font-size:11px; color:var(--text-faint);}
+.va-caret{font-size:9px; width:9px; flex-shrink:0;}
+.va-section-actions{display:flex; gap:0; flex-shrink:0; opacity:0; transition:opacity .1s;}
+.va-section-header:hover .va-section-actions{opacity:1;}
+.va-section-icon{font-size:11px; padding:4px 5px;}
+.va-section-items{padding-left:10px;}
+
 .va-main{flex:1; min-width:0; padding:0 34px 60px;}
 .va-sticky-top{padding-top:26px; position:sticky; top:0; z-index:15; background:var(--bg);}
 .va-topbar{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:22px;}
@@ -136,6 +151,10 @@ select.sort{
 }
 .va-collheader .name-input:hover{background:var(--surface-sunken);}
 .va-collheader .name-input:focus{background:#fff; border-color:var(--border); outline:none; box-shadow:0 0 0 3px var(--accent-soft);}
+.va-collheader .coll-section-select{
+  font-size:12px; padding:3px 8px; border-radius:6px; border:1px solid var(--border-soft);
+  background:var(--surface); color:var(--text-soft); margin:0 0 6px -2px;
+}
 .va-collheader .note-input-inline{
   font-family:var(--font-serif); font-size:15px; line-height:1.55; color:var(--text); max-width:64ch;
   width:100%; border:1px solid transparent; background:none; padding:5px 6px; border-radius:6px;

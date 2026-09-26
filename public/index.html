@@ -35,6 +35,23 @@
   </div>
 </div>
 
+<!-- New/rename section modal -->
+<div class="overlay hidden" id="sectionOverlay">
+  <div class="modal" style="max-width:380px;">
+    <h2 id="sectionModalTitle">New Section</h2>
+    <form id="sectionForm">
+      <div class="field">
+        <label for="s-name">Name</label>
+        <input type="text" id="s-name" placeholder="e.g. Couple &amp; relation" required>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" id="sectionCancel">Cancel</button>
+        <button type="submit" class="btn-primary" id="sectionSubmit">Save Section</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <!-- Generic confirm modal (post deletion) -->
 <div class="overlay hidden" id="confirmOverlay">
   <div class="modal" style="max-width:380px;">

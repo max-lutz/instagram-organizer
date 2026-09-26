@@ -76,7 +76,7 @@ test('backup download + restore', async (t) => {
 
     const res = await call('POST', '/api/backup/restore', payload);
     assert.equal(res.status, 200);
-    assert.deepEqual(res.body, { restored: true, collections: 1, tags: 1, posts: 1 });
+    assert.deepEqual(res.body, { restored: true, sections: 0, collections: 1, tags: 1, posts: 1 });
 
     const collections = await call('GET', '/api/collections');
     assert.equal(collections.body.length, 1);
@@ -93,6 +93,33 @@ test('backup download + restore', async (t) => {
     const tags = await call('GET', '/api/tags');
     assert.equal(tags.body.length, 1);
     assert.equal(tags.body[0].id, 60);
+  });
+
+  await t.test('sections round-trip through backup/restore', async () => {
+    const section = await call('POST', '/api/sections', { name: 'Reading' });
+    const coll = await call('POST', '/api/collections', {
+      name: 'Sectioned',
+      color: '#abcabc',
+      section_id: section.body.id,
+    });
+
+    const backup = await call('GET', '/api/backup');
+    assert.equal(backup.body.sections.length, 1);
+    assert.equal(backup.body.sections[0].name, 'Reading');
+    const backedUpColl = backup.body.collections.find((c) => c.id === coll.body.id);
+    assert.equal(backedUpColl.section_id, section.body.id);
+
+    const restored = await call('POST', '/api/backup/restore', backup.body);
+    assert.equal(restored.status, 200);
+    assert.equal(restored.body.sections, 1);
+
+    const sections = await call('GET', '/api/sections');
+    assert.equal(sections.body.length, 1);
+    assert.equal(sections.body[0].id, section.body.id);
+
+    const collections = await call('GET', '/api/collections');
+    const restoredColl = collections.body.find((c) => c.id === coll.body.id);
+    assert.equal(restoredColl.section_id, section.body.id);
   });
 
   await t.test('restore round-trips a downloaded backup', async () => {

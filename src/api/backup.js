@@ -4,10 +4,9 @@
 // path from the additive Instagram-export import flow (map #10 Notes).
 const { HttpError } = require('./http-error');
 
-// Bumped from issue #3's schema_version 2 to add owner_name/owner_username,
-// which posts gained after that resolution (map #10 Notes) and would
-// otherwise be lost on a restore.
-const SCHEMA_VERSION = 3;
+// Bumped from 3 to 4 to add sections and collections.section_id (issue #27),
+// which would otherwise be lost on a restore.
+const SCHEMA_VERSION = 4;
 
 function requireArray(value, field) {
   if (!Array.isArray(value)) throw new HttpError(400, `${field} must be an array`);
@@ -42,11 +41,12 @@ function createBackupApi(db) {
   }
 
   function download() {
+    const sections = db.prepare('SELECT id, name, created_at, updated_at FROM sections ORDER BY id').all();
     const collections = db
-      .prepare('SELECT id, name, note, color, created_at, updated_at FROM collections ORDER BY id')
+      .prepare('SELECT id, name, note, color, section_id, created_at, updated_at FROM collections ORDER BY id')
       .all();
     const tags = db.prepare('SELECT id, name, color, created_at, updated_at FROM tags ORDER BY id').all();
-    return { body: { schema_version: SCHEMA_VERSION, collections, tags, posts: backupPosts() } };
+    return { body: { schema_version: SCHEMA_VERSION, sections, collections, tags, posts: backupPosts() } };
   }
 
   // Wipe-and-replace, but wrapped in one transaction: if any row in the
@@ -59,6 +59,7 @@ function createBackupApi(db) {
         `Unsupported backup schema_version: ${body.schema_version}. Expected ${SCHEMA_VERSION}.`
       );
     }
+    const sectionsIn = requireArray(body.sections ?? [], 'sections');
     const collectionsIn = requireArray(body.collections, 'collections');
     const tagsIn = requireArray(body.tags ?? [], 'tags');
     const postsIn = requireArray(body.posts, 'posts');
@@ -69,12 +70,22 @@ function createBackupApi(db) {
       db.exec('DELETE FROM posts');
       db.exec('DELETE FROM tags');
       db.exec('DELETE FROM collections');
+      db.exec('DELETE FROM sections');
+
+      // Sections first -- collections.section_id references them, and foreign
+      // keys are enforced (db.js: PRAGMA foreign_keys = ON).
+      const insertSection = db.prepare(
+        'INSERT INTO sections (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)'
+      );
+      for (const s of sectionsIn) {
+        insertSection.run(s.id, s.name, s.created_at, s.updated_at);
+      }
 
       const insertCollection = db.prepare(
-        'INSERT INTO collections (id, name, note, color, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
+        'INSERT INTO collections (id, name, note, color, section_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
       );
       for (const c of collectionsIn) {
-        insertCollection.run(c.id, c.name, c.note ?? null, c.color, c.created_at, c.updated_at);
+        insertCollection.run(c.id, c.name, c.note ?? null, c.color, c.section_id ?? null, c.created_at, c.updated_at);
       }
 
       const insertTag = db.prepare(
@@ -121,7 +132,15 @@ function createBackupApi(db) {
       throw new HttpError(400, `Restore failed: ${err.message}`);
     }
 
-    return { body: { restored: true, collections: collectionsIn.length, tags: tagsIn.length, posts: postsIn.length } };
+    return {
+      body: {
+        restored: true,
+        sections: sectionsIn.length,
+        collections: collectionsIn.length,
+        tags: tagsIn.length,
+        posts: postsIn.length,
+      },
+    };
   }
 
   return { download, restore };

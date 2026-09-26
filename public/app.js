@@ -202,6 +202,7 @@
 
   // ---------------- data ----------------
   let collections = [];
+  let sections = [];
   let tags = [];
   let posts = []; // the current view's server-filtered + server-sorted posts
   let stats = { total: 0, unassigned: 0 };
@@ -220,6 +221,8 @@
     tagAdderOpen: false,
     tagQuery: '',
     tagEditingId: null, // tag id (string) whose rename/recolor popover is open
+    collapsedSections: new Set(), // section ids (string) currently collapsed in the sidebar
+    editingSectionId: null, // section id (string) being renamed via #sectionOverlay, null when creating
   };
   let newPostTitleManual = false;
   let newPostTagIds = [];
@@ -262,11 +265,12 @@
   }
 
   async function loadCollections() { collections = await apiGet('/api/collections'); }
+  async function loadSections() { sections = await apiGet('/api/sections'); }
   async function loadTags() { tags = await apiGet('/api/tags'); }
   async function loadStats() { stats = await apiGet('/api/posts/stats'); }
   async function loadPosts() { posts = await apiGet('/api/posts?' + buildPostsQuery(state)); }
   async function refreshAfterMutation() {
-    await Promise.all([loadCollections(), loadStats(), loadPosts()]);
+    await Promise.all([loadCollections(), loadSections(), loadStats(), loadPosts()]);
     render();
   }
 
@@ -275,6 +279,10 @@
   function getCollection(id) {
     if (id === null || id === undefined || id === '') return null;
     return collections.find((c) => sameId(c.id, id)) || null;
+  }
+  function getSection(id) {
+    if (id === null || id === undefined || id === '') return null;
+    return sections.find((s) => sameId(s.id, id)) || null;
   }
   function getTag(id) { return tags.find((t) => sameId(t.id, id)) || null; }
   function currentTagIds() {
@@ -328,11 +336,47 @@
     return `<select class="sort" id="sortSelect">${options.map(([value, label]) => `<option value="${value}" ${state.sort === value ? 'selected' : ''}>${label}</option>`).join('')}</select>`;
   }
 
+  // A Collection with no Section sits in the unlabeled bucket above all
+  // Sections (decision on #28) -- easiest to find, since it's where a
+  // freshly-created Collection always starts out.
+  function isUngrouped(c) { return c.section_id === null || c.section_id === undefined; }
+
+  function collectionNavItemHtml(c) {
+    const active = state.view === viewForCollection(c.id);
+    const style = `border-left:3px solid ${c.color};` + (active ? `background:${rgba(c.color, 0.14)}; color:${c.color};` : '');
+    return `<button class="va-nav-item ${active ? 'active' : ''}" data-view="collection:${c.id}" style="${style}">
+      <span class="va-dot" style="background:${c.color}"></span><span class="nav-name">${escapeHtml(c.name)}</span> <span class="count">${c.post_count}</span>
+    </button>`;
+  }
+
+  // Collapsible Section group (decision on #28: Sections don't nest further,
+  // so this is the only level of grouping above the flat Collection list).
+  function sectionGroupHtml(s) {
+    const collapsed = state.collapsedSections.has(String(s.id));
+    const members = collections.filter((c) => sameId(c.section_id, s.id));
+    return `
+      <div class="va-section">
+        <div class="va-section-header">
+          <button type="button" class="va-section-toggle" data-action="toggle-section" data-id="${s.id}">
+            <span class="va-caret">${collapsed ? '▸' : '▾'}</span><span class="va-section-name">${escapeHtml(s.name)}</span>
+            <span class="count">${members.length}</span>
+          </button>
+          <span class="va-section-actions">
+            <button type="button" class="icon-btn va-section-icon" data-action="rename-section" data-id="${s.id}" title="Rename section">✎</button>
+            <button type="button" class="icon-btn va-section-icon" data-action="delete-section" data-id="${s.id}" title="Delete section">×</button>
+          </span>
+        </div>
+        ${collapsed ? '' : `<div class="va-nav va-section-items">${members.map(collectionNavItemHtml).join('')}</div>`}
+      </div>`;
+  }
+
   function renderShell() {
+    const ungrouped = collections.filter(isUngrouped);
     const nav = `
       <div class="va-sidebar">
         <div class="va-brand">Socials Organizer</div>
         <button class="btn-ghost va-newcoll" id="newCollBtn">+ New collection</button>
+        <button class="btn-ghost va-newcoll" id="newSectionBtn">+ New section</button>
         <div class="va-nav">
           <button class="va-nav-item ${state.view === 'all' ? 'active' : ''}" data-view="all">All posts <span class="count">${stats.total}</span></button>
           <button class="va-nav-item ${state.view === 'unsorted' ? 'active' : ''}" data-view="unsorted">To sort <span class="count">${stats.unassigned}</span></button>
@@ -340,14 +384,9 @@
         <div>
           <div class="va-nav-label">Collections</div>
           <div class="va-nav">
-            ${collections.map((c) => {
-              const active = state.view === viewForCollection(c.id);
-              const style = `border-left:3px solid ${c.color};` + (active ? `background:${rgba(c.color, 0.14)}; color:${c.color};` : '');
-              return `<button class="va-nav-item ${active ? 'active' : ''}" data-view="collection:${c.id}" style="${style}">
-                <span class="va-dot" style="background:${c.color}"></span><span class="nav-name">${escapeHtml(c.name)}</span> <span class="count">${c.post_count}</span>
-              </button>`;
-            }).join('')}
+            ${ungrouped.map(collectionNavItemHtml).join('')}
           </div>
+          ${sections.map(sectionGroupHtml).join('')}
         </div>
       </div>`;
 
@@ -386,6 +425,10 @@
                </div>
                <div style="flex:1; min-width:0; padding-right:56px;">
                  <input type="text" id="coll-name-input" data-id="${c.id}" class="name-input" value="${escapeHtml(c.name)}" placeholder="Collection name">
+                 <select id="coll-section-select" data-id="${c.id}" class="coll-section-select" title="Section">
+                   <option value="">No section</option>
+                   ${sections.map((s) => `<option value="${s.id}" ${sameId(c.section_id, s.id) ? 'selected' : ''}>${escapeHtml(s.name)}</option>`).join('')}
+                 </select>
                  <textarea id="coll-note-input" data-id="${c.id}" class="note-input-inline" placeholder="Add a Collection Note — what's this collection for?">${escapeHtml(c.note || '')}</textarea>
                </div>
              </div>`;
@@ -668,6 +711,7 @@
 
     const addPostBtn = $('#addPostBtn'); if (addPostBtn) addPostBtn.addEventListener('click', () => openPostNew());
     const newCollBtn = $('#newCollBtn'); if (newCollBtn) newCollBtn.addEventListener('click', () => openCollectionModal());
+    const newSectionBtn = $('#newSectionBtn'); if (newSectionBtn) newSectionBtn.addEventListener('click', () => openSectionModal());
     app.querySelectorAll('[data-stub]').forEach((btn) => btn.addEventListener('click', () => { closeAllMenus(); stubToast(); }));
     const importFileBtn = $('#importFileBtn');
     if (importFileBtn) importFileBtn.addEventListener('click', () => { closeAllMenus(); $('#importFileInput').click(); });
@@ -706,6 +750,47 @@
       if (!c) return;
       c.note = e.target.value;
       collectionSaver.schedule(c.id, { note: e.target.value }, saveCollectionFields);
+    });
+    const sectionSelect = $('#coll-section-select');
+    if (sectionSelect) sectionSelect.addEventListener('change', async (e) => {
+      const id = sectionSelect.dataset.id;
+      const value = e.target.value;
+      try {
+        const updated = await apiPatch(`/api/collections/${id}`, { section_id: value ? Number(value) : null });
+        const idx = collections.findIndex((x) => sameId(x.id, id));
+        if (idx > -1) collections[idx] = updated;
+        render();
+      } catch (err) { showToast(err.message); }
+    });
+
+    app.querySelectorAll('[data-action="toggle-section"]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = String(btn.dataset.id);
+        if (state.collapsedSections.has(id)) state.collapsedSections.delete(id);
+        else state.collapsedSections.add(id);
+        render();
+      });
+    });
+    app.querySelectorAll('[data-action="rename-section"]').forEach((btn) => {
+      btn.addEventListener('click', (e) => { e.stopPropagation(); openSectionModal(btn.dataset.id); });
+    });
+    app.querySelectorAll('[data-action="delete-section"]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const s = getSection(btn.dataset.id);
+        if (!s) return;
+        confirmAction(
+          'Delete this section?',
+          `Its Collections move back to ungrouped — nothing else is deleted.`,
+          async () => {
+            try {
+              await apiDelete(`/api/sections/${s.id}`);
+              await refreshAfterMutation();
+              showToast('Section deleted');
+            } catch (err) { showToast(err.message); }
+          }
+        );
+      });
     });
 
     app.querySelectorAll('[data-action="color-swatch"]').forEach((btn) => {
@@ -1239,6 +1324,43 @@
     });
   }
 
+  // ---------------- new/rename section modal ----------------
+  // Sections have no detail page of their own (decision on #28: name only,
+  // no note/color), so this one modal serves both create (editingSectionId
+  // null) and rename (editingSectionId set), unlike Collection's modal which
+  // only creates -- renaming a Collection happens inline in its header.
+  function openSectionModal(id) {
+    const editing = id ? getSection(id) : null;
+    state.editingSectionId = editing ? String(editing.id) : null;
+    $('#sectionModalTitle').textContent = editing ? 'Rename Section' : 'New Section';
+    $('#s-name').value = editing ? editing.name : '';
+    $('#sectionOverlay').classList.remove('hidden');
+    setTimeout(() => $('#s-name').focus(), 30);
+  }
+  function closeSectionModal() { $('#sectionOverlay').classList.add('hidden'); state.editingSectionId = null; }
+  function bindSectionModalHandlers() {
+    $('#sectionCancel').addEventListener('click', closeSectionModal);
+    $('#sectionOverlay').addEventListener('click', (e) => { if (e.target.id === 'sectionOverlay') closeSectionModal(); });
+    $('#sectionForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = $('#s-name').value.trim();
+      if (!name) return;
+      const editingId = state.editingSectionId;
+      const submitBtn = $('#sectionSubmit');
+      if (submitBtn) submitBtn.disabled = true;
+      try {
+        if (editingId) await apiPatch(`/api/sections/${editingId}`, { name });
+        else await apiPost('/api/sections', { name });
+        closeSectionModal();
+        await refreshAfterMutation();
+      } catch (err) {
+        showToast(err.message);
+      } finally {
+        if (submitBtn) submitBtn.disabled = false;
+      }
+    });
+  }
+
   // ---------------- collection deletion modal (keep-or-delete-posts, ADR 0001) ----------------
   function openCollDeleteModal(id) {
     const c = getCollection(id);
@@ -1294,6 +1416,7 @@
     document.addEventListener('keydown', async (e) => {
       if (e.key === 'Escape') {
         closeCollectionModal();
+        closeSectionModal();
         $('#confirmOverlay').classList.add('hidden'); state.pendingConfirm = null;
         closeCollDeleteModal();
         closeAllMenus();
@@ -1309,7 +1432,7 @@
   // ---------------- init ----------------
   async function init() {
     try {
-      await Promise.all([loadCollections(), loadTags(), loadStats(), loadPosts()]);
+      await Promise.all([loadCollections(), loadSections(), loadTags(), loadStats(), loadPosts()]);
     } catch (err) {
       $('#app').innerHTML = `<div class="empty"><h2>Couldn't load data</h2><p>${escapeHtml(err.message)}</p></div>`;
       return;
@@ -1322,6 +1445,7 @@
   // helpers below without a document/fetch global in scope.
   if (typeof document !== 'undefined') {
     bindCollectionModalHandlers();
+    bindSectionModalHandlers();
     bindCollDeleteModalHandlers();
     bindConfirmModalHandlers();
     bindImportInputHandlers();
