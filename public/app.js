@@ -145,6 +145,34 @@
     return results;
   }
 
+  // issue #31/#41's reimport diff, run as an extra step appended to
+  // performImport. Direction (a): an export link matches a tombstone that
+  // hasn't been dismissed (deleted in-app, still saved on Instagram).
+  // Direction (b): a live instagram-import Post, not reimport_dismissed,
+  // whose link fell out of this export (removed/un-saved on Instagram).
+  // deletedPosts/existingPosts are the raw API rows (deleted_posts / posts),
+  // and deletedPosts must be *every* tombstone (dismissed or not): a
+  // dismissed one still has to keep its link out of performImport's normal
+  // add loop -- "dismissed" means silently ignored forever, not eligible to
+  // silently come back as brand new. Only the review screen itself (via
+  // readdCandidates) drops dismissed tombstones.
+  function computeReimportDiff(parsedPosts, existingPosts, deletedPosts) {
+    const exportLinks = new Set(parsedPosts.map((p) => p.link));
+    const tombstoneByLink = new Map(deletedPosts.map((d) => [d.link, d]));
+
+    const readdCandidates = [];
+    for (const post of parsedPosts) {
+      const tombstone = tombstoneByLink.get(post.link);
+      if (tombstone && !tombstone.dismissed) readdCandidates.push({ exportPost: post, tombstone });
+    }
+
+    const dropCandidates = existingPosts.filter(
+      (p) => p.provenance === 'instagram-import' && !p.reimport_dismissed && !exportLinks.has(p.link)
+    );
+
+    return { readdCandidates, dropCandidates, tombstoneByLink };
+  }
+
   function debounce(fn, delay) {
     let timer = null;
     return function debounced(...args) {
@@ -337,7 +365,7 @@
     t.textContent = msg;
     t.classList.add('show');
     clearTimeout(showToast._t);
-    showToast._t = setTimeout(() => t.classList.remove('show'), 2400);
+    showToast._t = setTimeout(() => t.classList.remove('show'), 5000);
   }
   function stubToast() { showToast('Coming soon'); }
 
@@ -1173,6 +1201,29 @@
     }
   }
 
+  // Mirrors resolveImportCollectionId, but for Tags (tags.name is also UNIQUE
+  // COLLATE NOCASE) -- only the reimport diff's Re-add action (issue #41)
+  // needs this, since it has to recreate a tombstoned Post's Tags by name:
+  // the snapshot only kept names, not ids (#30).
+  async function resolveOrCreateTagId(name, tagByName, colorCounter) {
+    const trimmed = name.trim();
+    if (!trimmed) return null;
+    const existing = tagByName.get(trimmed);
+    if (existing) return existing.id;
+    try {
+      const created = await apiPost('/api/tags', { name: trimmed, color: PALETTE[colorCounter.next++ % PALETTE.length] });
+      tagByName.set(trimmed, created);
+      return created.id;
+    } catch (err) {
+      if (err.status === 409) {
+        const refreshed = await apiGet('/api/tags');
+        const match = refreshed.find((t) => t.name.trim().toLowerCase() === trimmed.toLowerCase());
+        if (match) { tagByName.set(trimmed, match); return match.id; }
+      }
+      throw err;
+    }
+  }
+
   async function performImport(file) {
     let raw;
     try {
@@ -1189,8 +1240,15 @@
 
     let freshCollections;
     let existingPosts;
+    let allTombstones;
     try {
-      [freshCollections, existingPosts] = await Promise.all([apiGet('/api/collections'), apiGet('/api/posts')]);
+      [freshCollections, existingPosts, allTombstones] = await Promise.all([
+        apiGet('/api/collections'),
+        apiGet('/api/posts'),
+        // Every tombstone, dismissed or not -- computeReimportDiff needs the
+        // dismissed ones too, to keep their links out of the normal add loop.
+        apiGet('/api/deleted-posts'),
+      ]);
     } catch (err) {
       showToast(err.message);
       return;
@@ -1198,6 +1256,11 @@
     const collectionByName = new Map(freshCollections.map((c) => [c.name.trim(), c]));
     const existingLinks = new Set(existingPosts.map((p) => p.link));
     const colorCounter = { next: freshCollections.length };
+    const { readdCandidates, dropCandidates, tombstoneByLink } = computeReimportDiff(
+      parsed,
+      existingPosts,
+      allTombstones
+    );
 
     let added = 0;
     let skipped = 0;
@@ -1205,6 +1268,9 @@
     const importedCollectionNames = new Set();
     for (const post of parsed) {
       if (existingLinks.has(post.link)) { skipped++; continue; }
+      // issue #41: a link with a live (non-dismissed) tombstone is deferred to
+      // the reimport review screen below instead of silently coming back.
+      if (tombstoneByLink.has(post.link)) continue;
       try {
         const collectionId = await resolveImportCollectionId(post.collectionName, collectionByName, colorCounter);
         await apiPost('/api/posts', {
@@ -1234,6 +1300,221 @@
     if (skipped) parts.push(`skipped ${skipped} already saved`);
     if (failed) parts.push(`${failed} failed`);
     showToast(parts.join(', '));
+
+    // issue #31: the diff only surfaces when at least one Post is affected --
+    // a normal import with no gaps behaves exactly as today.
+    if (readdCandidates.length || dropCandidates.length) {
+      openReimportReview(readdCandidates, dropCandidates);
+    }
+  }
+
+  // ---------------- reimport diff review (issue #31/#41) ----------------
+  // Batched review screen shown after a normal import when the diff found
+  // anything: direction (a) rows offer Re-add/Skip, direction (b) rows offer
+  // Keep/Drop, each pairable with an opt-in "don't ask again". Held outside
+  // `state` (unlike most UI state) since it's only ever touched by this one
+  // flow and never needs to survive a full render() rebuild of #app.
+  let reimportReview = null; // { readd: [{ exportPost, tombstone, choice, dontAskAgain }], drop: [{ post, choice, dontAskAgain }] }
+
+  function reimportReviewRowHtml(kind, idx, item) {
+    if (kind === 'readd') {
+      const { tombstone } = item;
+      const label = tombstone.title || tombstone.description || tombstone.link;
+      const meta = tombstone.collection_name
+        ? `Deleted here, still on Instagram &middot; was in ${escapeHtml(tombstone.collection_name)}`
+        : 'Deleted here, still on Instagram';
+      return `
+        <div class="reimport-row" data-kind="readd" data-idx="${idx}">
+          <div class="reimport-row-info">
+            <div class="reimport-row-title"><a href="${escapeHtml(tombstone.link)}" target="_blank" rel="noopener">${escapeHtml(label)}</a></div>
+            <div class="reimport-row-meta">${meta}</div>
+          </div>
+          <div class="reimport-row-choice">
+            <label><input type="radio" name="reimport-readd-${idx}" value="skip" ${item.choice === 'skip' ? 'checked' : ''}> Skip</label>
+            <label><input type="radio" name="reimport-readd-${idx}" value="readd" ${item.choice === 'readd' ? 'checked' : ''}> Re-add</label>
+          </div>
+          <label class="reimport-row-dismiss">
+            <input type="checkbox" ${item.dontAskAgain ? 'checked' : ''} ${item.choice !== 'skip' ? 'disabled' : ''}> Don't ask again
+          </label>
+        </div>`;
+    }
+    const { post } = item;
+    return `
+      <div class="reimport-row" data-kind="drop" data-idx="${idx}">
+        <div class="reimport-row-info">
+          <div class="reimport-row-title"><a href="${escapeHtml(post.link)}" target="_blank" rel="noopener">${escapeHtml(post.title || post.link)}</a></div>
+          <div class="reimport-row-meta">No longer in this export</div>
+        </div>
+        <div class="reimport-row-choice">
+          <label><input type="radio" name="reimport-drop-${idx}" value="keep" ${item.choice === 'keep' ? 'checked' : ''}> Keep</label>
+          <label><input type="radio" name="reimport-drop-${idx}" value="drop" ${item.choice === 'drop' ? 'checked' : ''}> Drop</label>
+        </div>
+        <label class="reimport-row-dismiss">
+          <input type="checkbox" ${item.dontAskAgain ? 'checked' : ''} ${item.choice !== 'keep' ? 'disabled' : ''}> Don't ask again
+        </label>
+      </div>`;
+  }
+
+  function renderReimportReview() {
+    if (!reimportReview) return;
+    const parts = [];
+    if (reimportReview.readd.length) {
+      parts.push('<div class="reimport-section-label">Deleted here, still on Instagram</div>');
+      parts.push(reimportReview.readd.map((item, idx) => reimportReviewRowHtml('readd', idx, item)).join(''));
+    }
+    if (reimportReview.drop.length) {
+      parts.push('<div class="reimport-section-label">No longer on Instagram</div>');
+      parts.push(reimportReview.drop.map((item, idx) => reimportReviewRowHtml('drop', idx, item)).join(''));
+    }
+    $('#reimportReviewList').innerHTML = parts.join('');
+  }
+
+  function openReimportReview(readdCandidates, dropCandidates) {
+    reimportReview = {
+      readd: readdCandidates.map((c) => ({ ...c, choice: 'skip', dontAskAgain: false })),
+      drop: dropCandidates.map((post) => ({ post, choice: 'keep', dontAskAgain: false })),
+    };
+    renderReimportReview();
+    $('#reimportReviewOverlay').classList.remove('hidden');
+  }
+  function closeReimportReview() {
+    $('#reimportReviewOverlay').classList.add('hidden');
+    reimportReview = null;
+  }
+
+  // Re-add fully restores the tombstone's snapshot (issue #30/#31): title
+  // (only if it had one -- otherwise let the server re-derive it from the
+  // description, same as a fresh import), description/note/owner, Collection
+  // resolved by name, and Tags resolved/recreated by name. The tombstone row
+  // itself needs no explicit delete -- posts.js's create() already clears any
+  // tombstone matching the new Post's link (issue #40's re-add invariant).
+  async function applyReimportReadd(tombstone, collectionByName, collColorCounter, tagByName, tagColorCounter) {
+    const collectionId = await resolveImportCollectionId(tombstone.collection_name || '', collectionByName, collColorCounter);
+    const body = {
+      link: tombstone.link,
+      provenance: 'instagram-import',
+      description: tombstone.description,
+      note: tombstone.note,
+      owner_name: tombstone.owner_name,
+      owner_username: tombstone.owner_username,
+      collection_id: collectionId,
+    };
+    if (tombstone.title) body.title = tombstone.title;
+    const created = await apiPost('/api/posts', body);
+
+    let tagNames = [];
+    try { tagNames = JSON.parse(tombstone.tags || '[]'); } catch { tagNames = []; }
+    for (const name of tagNames) {
+      try {
+        const tagId = await resolveOrCreateTagId(name, tagByName, tagColorCounter);
+        if (tagId) await apiPost(`/api/posts/${created.id}/tags`, { tag_id: tagId });
+      } catch {
+        // Best-effort: a lost Tag (e.g. hit the 4-tag cap) isn't worth failing the re-add itself.
+      }
+    }
+  }
+
+  async function applyReimportReview() {
+    if (!reimportReview) return;
+    const { readd, drop } = reimportReview;
+
+    let freshCollections;
+    let freshTags;
+    try {
+      [freshCollections, freshTags] = await Promise.all([apiGet('/api/collections'), apiGet('/api/tags')]);
+    } catch (err) {
+      showToast(err.message);
+      return;
+    }
+    const collectionByName = new Map(freshCollections.map((c) => [c.name.trim(), c]));
+    const collColorCounter = { next: freshCollections.length };
+    const tagByName = new Map(freshTags.map((t) => [t.name.trim(), t]));
+    const tagColorCounter = { next: freshTags.length };
+
+    let readded = 0;
+    let dropped = 0;
+    let dismissed = 0;
+    let failed = 0;
+
+    for (const item of readd) {
+      if (item.choice === 'readd') {
+        try {
+          await applyReimportReadd(item.tombstone, collectionByName, collColorCounter, tagByName, tagColorCounter);
+          readded++;
+        } catch {
+          failed++;
+        }
+      } else if (item.dontAskAgain) {
+        try {
+          await apiPatch(`/api/deleted-posts/${item.tombstone.id}`, { dismissed: true });
+          dismissed++;
+        } catch {
+          failed++;
+        }
+      }
+    }
+
+    for (const item of drop) {
+      if (item.choice === 'drop') {
+        try {
+          await apiDelete(`/api/posts/${item.post.id}`);
+          dropped++;
+        } catch {
+          failed++;
+        }
+      } else if (item.dontAskAgain) {
+        try {
+          await apiPatch(`/api/posts/${item.post.id}`, { reimport_dismissed: true });
+          dismissed++;
+        } catch {
+          failed++;
+        }
+      }
+    }
+
+    closeReimportReview();
+    try {
+      await refreshAfterMutation();
+    } catch (err) {
+      showToast(err.message);
+      return;
+    }
+
+    const parts = [];
+    if (readded) parts.push(`re-added ${readded}`);
+    if (dropped) parts.push(`dropped ${dropped}`);
+    if (dismissed) parts.push(`${dismissed} dismissed`);
+    if (failed) parts.push(`${failed} failed`);
+    showToast(parts.length ? parts.join(', ') : 'No changes');
+  }
+
+  function bindReimportReviewModalHandlers() {
+    const list = $('#reimportReviewList');
+    list.addEventListener('change', (e) => {
+      const row = e.target.closest('.reimport-row');
+      if (!row || !reimportReview) return;
+      const item = reimportReview[row.dataset.kind][Number(row.dataset.idx)];
+      if (!item) return;
+      if (e.target.type === 'radio') {
+        item.choice = e.target.value;
+        renderReimportReview();
+      } else if (e.target.type === 'checkbox') {
+        item.dontAskAgain = e.target.checked;
+      }
+    });
+    $('#reimportReviewCancel').addEventListener('click', closeReimportReview);
+    $('#reimportReviewOverlay').addEventListener('click', (e) => {
+      if (e.target.id === 'reimportReviewOverlay') closeReimportReview();
+    });
+    $('#reimportReviewApply').addEventListener('click', async () => {
+      const applyBtn = $('#reimportReviewApply');
+      if (applyBtn) applyBtn.disabled = true;
+      try {
+        await applyReimportReview();
+      } finally {
+        if (applyBtn) applyBtn.disabled = false;
+      }
+    });
   }
 
   function bindImportInputHandlers() {
@@ -1454,6 +1735,7 @@
         closeSectionModal();
         $('#confirmOverlay').classList.add('hidden'); state.pendingConfirm = null;
         closeCollDeleteModal();
+        closeReimportReview();
         closeAllMenus();
         if (state.detailMode !== null || state.colorPopoverFor !== null) {
           await closeDetailPanel();
@@ -1485,12 +1767,20 @@
     bindConfirmModalHandlers();
     bindImportInputHandlers();
     bindRestoreInputHandlers();
+    bindReimportReviewModalHandlers();
     bindGlobalKeydown();
     init();
   }
 
   // Exposed for the pure-logic unit tests in test/frontend/helpers.test.js -- inert in the browser.
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { firstSentence, parseInstagramLink, buildPostsQuery, isVideoLink, parseInstagramExport };
+    module.exports = {
+      firstSentence,
+      parseInstagramLink,
+      buildPostsQuery,
+      isVideoLink,
+      parseInstagramExport,
+      computeReimportDiff,
+    };
   }
 })();

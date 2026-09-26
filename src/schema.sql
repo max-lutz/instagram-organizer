@@ -29,6 +29,10 @@ CREATE TABLE IF NOT EXISTS posts (
   owner_username TEXT,
   source TEXT NOT NULL DEFAULT 'instagram',
   provenance TEXT NOT NULL,
+  -- issue #31/#41: direction (b) of the reimport diff (a live instagram-import
+  -- Post whose link fell out of a later export) is opted out of permanently
+  -- via "Keep, don't ask again".
+  reimport_dismissed INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
@@ -66,5 +70,9 @@ CREATE TABLE IF NOT EXISTS deleted_posts (
   owner_username TEXT,
   collection_name TEXT,
   tags TEXT,
-  deleted_at INTEGER NOT NULL
+  deleted_at INTEGER NOT NULL,
+  -- issue #31/#41: direction (a) of the reimport diff (this link still shows
+  -- up in a later export) is opted out of permanently via "Skip, don't ask
+  -- again" -- the link is then treated as if it weren't in the export at all.
+  dismissed INTEGER NOT NULL DEFAULT 0
 );

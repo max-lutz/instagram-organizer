@@ -33,6 +33,7 @@ test('backup download + restore', async (t) => {
     assert.equal(backedUpPost.owner_name, 'Chef');
     assert.equal(backedUpPost.owner_username, 'chef_handle');
     assert.deepEqual(backedUpPost.tag_ids, [tag.body.id]);
+    assert.equal(backedUpPost.reimport_dismissed, 0);
     assert.deepEqual(backup.body.deleted_posts, []);
   });
 
@@ -154,6 +155,36 @@ test('backup download + restore', async (t) => {
 
     const after = await call('GET', '/api/backup');
     assert.ok(after.body.deleted_posts.some((d) => d.link === 'https://instagram.com/p/tomb-a'));
+  });
+
+  await t.test('reimport_dismissed and deleted_posts.dismissed round-trip through backup/restore (issue #41)', async () => {
+    const post = await call('POST', '/api/posts', {
+      link: 'https://instagram.com/p/reimport-dismiss-backup',
+      provenance: 'instagram-import',
+    });
+    await call('PATCH', `/api/posts/${post.body.id}`, { reimport_dismissed: true });
+
+    const tombPost = await call('POST', '/api/posts', { link: 'https://instagram.com/p/tomb-dismiss-backup', provenance: 'manual' });
+    await call('DELETE', `/api/posts/${tombPost.body.id}`);
+    const tombRow = server.db.prepare('SELECT id FROM deleted_posts WHERE link = ?').get('https://instagram.com/p/tomb-dismiss-backup');
+    await call('PATCH', `/api/deleted-posts/${tombRow.id}`, { dismissed: true });
+
+    const backup = await call('GET', '/api/backup');
+    const backedUpPost = backup.body.posts.find((p) => p.link === 'https://instagram.com/p/reimport-dismiss-backup');
+    assert.equal(backedUpPost.reimport_dismissed, 1);
+    const backedUpTomb = backup.body.deleted_posts.find((d) => d.link === 'https://instagram.com/p/tomb-dismiss-backup');
+    assert.equal(backedUpTomb.dismissed, 1);
+
+    const restored = await call('POST', '/api/backup/restore', backup.body);
+    assert.equal(restored.status, 200);
+
+    const posts = await call('GET', '/api/posts');
+    const restoredPost = posts.body.find((p) => p.link === 'https://instagram.com/p/reimport-dismiss-backup');
+    assert.equal(restoredPost.reimport_dismissed, 1);
+
+    const afterBackup = await call('GET', '/api/backup');
+    const restoredTomb = afterBackup.body.deleted_posts.find((d) => d.link === 'https://instagram.com/p/tomb-dismiss-backup');
+    assert.equal(restoredTomb.dismissed, 1);
   });
 
   await t.test('restore round-trips a downloaded backup', async () => {

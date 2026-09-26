@@ -269,6 +269,19 @@ select.sort{
 .modal-actions{display:flex; justify-content:flex-end; gap:10px; margin-top:6px; flex-wrap:wrap;}
 .modal-actions .btn-danger{background:var(--danger); color:#fff; border:none; border-radius:7px; padding:9px 16px; font-size:13.5px; font-weight:600;}
 
+/* ---------- reimport diff review (issue #31/#41) ---------- */
+.reimport-review-list{max-height:50vh; overflow-y:auto; margin:4px 0 10px;}
+.reimport-section-label{font-size:10px; text-transform:uppercase; letter-spacing:.03em; color:var(--text-faint); font-weight:700; padding:10px 2px 4px;}
+.reimport-row{display:flex; align-items:center; gap:12px; padding:9px 2px; border-bottom:1px solid var(--border-soft);}
+.reimport-row-info{flex:1; min-width:0;}
+.reimport-row-title{font-size:13.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.reimport-row-title a{color:inherit; text-decoration:none;}
+.reimport-row-title a:hover{text-decoration:underline; color:var(--accent);}
+.reimport-row-meta{font-size:11.5px; color:var(--text-soft); margin-top:2px;}
+.reimport-row-choice{display:flex; gap:8px; font-size:12.5px; white-space:nowrap;}
+.reimport-row-choice label{display:flex; align-items:center; gap:3px; cursor:pointer;}
+.reimport-row-dismiss{font-size:11px; color:var(--text-soft); display:flex; align-items:center; gap:4px; white-space:nowrap; cursor:pointer;}
+
 .swatch-picker{display:flex; flex-wrap:wrap; gap:8px;}
 .swatch-picker button{
   width:26px; height:26px; border-radius:50%; border:2px solid transparent; padding:0;

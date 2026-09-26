@@ -222,13 +222,29 @@ function createPostsApi(db) {
       title = firstSentence(description);
     }
 
+    // issue #31/#41: "Keep, don't ask again" on the reimport diff's direction
+    // (b) (a live instagram-import Post missing from a later export).
+    const reimportDismissed =
+      body.reimport_dismissed !== undefined ? (body.reimport_dismissed ? 1 : 0) : existing.reimport_dismissed;
+
     const now = Date.now();
     db.prepare(
       `UPDATE posts SET
         collection_id = ?, title = ?, title_manual = ?, description = ?, note = ?,
-        owner_name = ?, owner_username = ?, updated_at = ?
+        owner_name = ?, owner_username = ?, reimport_dismissed = ?, updated_at = ?
        WHERE id = ?`
-    ).run(collectionId, title, titleManual, description, note, ownerName, ownerUsername, now, existing.id);
+    ).run(
+      collectionId,
+      title,
+      titleManual,
+      description,
+      note,
+      ownerName,
+      ownerUsername,
+      reimportDismissed,
+      now,
+      existing.id
+    );
 
     return { body: getPostOr404(existing.id) };
   }
